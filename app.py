@@ -115,9 +115,6 @@ def fetch_from_api():
     
     return jsonify({'status': 'success', 'message': f'{country_name} verileri güncellendi.'})
     
-@app.route('/test')
-def test():
-    return "Uygulama çalışıyor!", 200
     
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000)
