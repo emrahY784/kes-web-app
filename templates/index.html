@@ -13,8 +13,6 @@
         input, select, button { margin: 5px; padding: 8px; }
         .result { background: #ecf0f1; padding: 15px; margin-top: 20px; border-radius: 5px; }
         .year-list { background: #e8f4f8; margin-top: 10px; padding: 8px; border-radius: 4px; font-size: 0.9em; }
-        .error { color: red; }
-        .success { color: green; }
     </style>
     <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
 </head>
@@ -79,8 +77,15 @@
 
     <div id="api" class="tab-content">
         <h3>API'den Otomatik Veri Çek</h3>
-        <label>Ülke Kodu: <input type="text" id="api_code" placeholder="TUR" style="width:80px"></label>
-        <label>Ülke Adı: <input type="text" id="api_name" placeholder="Turkey"></label>
+        <label>Ülke Adı: 
+            <select id="api_country">
+                <option value="Turkey">Turkey</option>
+                <option value="United States">United States</option>
+                <option value="Germany">Germany</option>
+                <option value="China">China</option>
+                <option value="Russia">Russia</option>
+            </select>
+        </label>
         <button onclick="fetchFromAPI()">Dünya Bankası'ndan Gini ve Yönetişim Verilerini Çek</button>
         <div id="api_result" class="result"></div>
     </div>
@@ -107,14 +112,14 @@ async function getAvailableYears() {
         });
         const data = await res.json();
         if (data.error) {
-            yearListDiv.innerHTML = `<span class="error">⚠️ ${data.error}</span>`;
+            yearListDiv.innerHTML = '⚠️ ' + data.error;
         } else if (data.years && data.years.length > 0) {
             yearListDiv.innerHTML = '<strong>Mevcut yıllar:</strong> ' + data.years.join(', ');
         } else {
-            yearListDiv.innerHTML = '<span class="error">⚠️ Bu ülke için henüz veri yok. Lütfen "API\'den Çek" veya "Manuel Veri Girişi" yapın.</span>';
+            yearListDiv.innerHTML = '⚠️ Bu ülke için henüz veri yok. Lütfen "API\'den Çek" veya "Manuel Veri Girişi" yapın.';
         }
     } catch (err) {
-        yearListDiv.innerHTML = `<span class="error">⚠️ Sunucu hatası: ${err.message}</span>`;
+        yearListDiv.innerHTML = '⚠️ Sunucu hatası: ' + err.message;
     }
 }
 
@@ -136,9 +141,16 @@ async function calculate() {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ country, year, alpha, beta, gamma, lambd, geometric, use_min })
         });
-        const result = await res.json();
+        const text = await res.text();
+        let result;
+        try {
+            result = JSON.parse(text);
+        } catch(e) {
+            resultDiv.innerHTML = `<p style="color:red">Sunucu yanıtı JSON değil. İlk 200 karakter: ${text.substring(0,200)}</p>`;
+            return;
+        }
         if (result.error) {
-            resultDiv.innerHTML = `<span class="error">${result.error}</span>`;
+            resultDiv.innerHTML = `<p style="color:red">${result.error}</p>`;
         } else {
             let yearMsg = '';
             if (result.used_year !== result.requested_year) {
@@ -152,7 +164,7 @@ async function calculate() {
             `;
         }
     } catch (err) {
-        resultDiv.innerHTML = `<span class="error">Sunucu hatası: ${err.message}</span>`;
+        resultDiv.innerHTML = `<p style="color:red">Ağ hatası: ${err.message}</p>`;
     }
 }
 
@@ -170,13 +182,13 @@ async function loadTrend() {
         });
         const result = await res.json();
         if (result.error) {
-            graphDiv.innerHTML = `<span class="error">${result.error}</span>`;
+            graphDiv.innerHTML = `<p style="color:red">${result.error}</p>`;
         } else {
             const graph = JSON.parse(result.graph);
             Plotly.newPlot('trend_graph', graph.data, graph.layout);
         }
     } catch (err) {
-        graphDiv.innerHTML = `<span class="error">Hata: ${err.message}</span>`;
+        graphDiv.innerHTML = `<p style="color:red">Hata: ${err.message}</p>`;
     }
 }
 
@@ -200,42 +212,39 @@ async function saveManual() {
         });
         const result = await res.json();
         if (result.error) {
-            resultDiv.innerHTML = `<span class="error">${result.error}</span>`;
+            resultDiv.innerHTML = `<p style="color:red">${result.error}</p>`;
         } else {
-            resultDiv.innerHTML = `<span class="success">${result.message}</span>`;
+            resultDiv.innerHTML = `<p style="color:green">${result.message}</p>`;
             if (document.getElementById('country').value === data.country) getAvailableYears();
         }
     } catch (err) {
-        resultDiv.innerHTML = `<span class="error">Hata: ${err.message}</span>`;
+        resultDiv.innerHTML = `<p style="color:red">Hata: ${err.message}</p>`;
     }
 }
 
 async function fetchFromAPI() {
-    const code = document.getElementById('api_code').value;
-    const name = document.getElementById('api_name').value;
+    const name = document.getElementById('api_country').value;
     const resultDiv = document.getElementById('api_result');
     resultDiv.innerHTML = 'Veri çekiliyor...';
     try {
         const res = await fetch('/fetch_from_api', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ code, name })
+            body: JSON.stringify({ name: name })
         });
         const result = await res.json();
         if (result.error) {
-            resultDiv.innerHTML = `<span class="error">${result.error}</span>`;
+            resultDiv.innerHTML = `<p style="color:red">${result.error}</p>`;
         } else {
-            resultDiv.innerHTML = `<span class="success">${result.message}</span>`;
+            resultDiv.innerHTML = `<p style="color:green">${result.message}</p>`;
             if (document.getElementById('country').value === name) getAvailableYears();
         }
     } catch (err) {
-        resultDiv.innerHTML = `<span class="error">Hata: ${err.message}</span>`;
+        resultDiv.innerHTML = `<p style="color:red">Hata: ${err.message}</p>`;
     }
 }
 
-window.onload = function() {
-    getAvailableYears();
-};
+window.onload = getAvailableYears;
 </script>
 </body>
 </html>
