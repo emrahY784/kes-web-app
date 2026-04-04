@@ -4,6 +4,7 @@ import plotly.express as px
 import plotly.utils
 import json
 import os
+import traceback
 from kes_calculator import KESCalculator
 from data_fetcher import DataFetcher
 
@@ -17,18 +18,31 @@ COUNTRIES = [
     {'code': 'RUS', 'name': 'Russia'},
 ]
 
-# World Bank API anahtarı (opsiyonel, environment variable'dan al)
 WORLD_BANK_API_KEY = os.environ.get('WORLD_BANK_API_KEY', None)
 
 @app.route('/')
 def index():
-    return render_template('index.html', countries=COUNTRIES)
+    try:
+        return render_template('index.html', countries=COUNTRIES)
+    except Exception as e:
+        return f"<h1>Hata</h1><pre>{traceback.format_exc()}</pre>", 500
+
+# Yeni: Bir ülke için mevcut yılları döndürür
+@app.route('/available_years', methods=['POST'])
+def available_years():
+    data = request.json
+    country = data['country']
+    fetcher = DataFetcher()
+    df = fetcher.load_to_dataframe()
+    df_country = df[df['country'] == country]
+    years = sorted(df_country['year'].unique().tolist())
+    return jsonify({'years': years})
 
 @app.route('/calculate', methods=['POST'])
 def calculate():
     data = request.json
     country = data['country']
-    year = int(data['year'])
+    requested_year = int(data['year'])
     alpha = float(data.get('alpha', 0.5))
     beta = float(data.get('beta', 0.5))
     gamma = float(data.get('gamma', 0.5))
@@ -38,15 +52,26 @@ def calculate():
 
     fetcher = DataFetcher(world_bank_api_key=WORLD_BANK_API_KEY)
     df = fetcher.load_to_dataframe()
-    row = df[(df['country'] == country) & (df['year'] == year)]
-    if row.empty:
-        return jsonify({'error': f'{country} - {year} için veri bulunamadı. Lütfen "Manuel Veri Girişi" sekmesinden ekleyin.'}), 404
+    df_country = df[df['country'] == country]
+    
+    if df_country.empty:
+        return jsonify({'error': f'{country} için hiç veri yok. Lütfen "API\'den Çek" veya "Manuel Veri Girişi" yapın.'}), 404
 
-    gini = row['gini'].values[0]
-    automation = row['automation'].values[0]
-    evcillestirme = row['evcillestirme'].values[0]
-    bilinc = row['bilinc'].values[0]
-    dis_direnc = row['dis_direnc'].values[0]
+    # İstenen yıl varsa onu kullan, yoksa en yakın yılı bul
+    if requested_year in df_country['year'].values:
+        row = df_country[df_country['year'] == requested_year].iloc[0]
+        used_year = requested_year
+    else:
+        # En yakın yılı bul
+        df_country['year_diff'] = abs(df_country['year'] - requested_year)
+        nearest = df_country.loc[df_country['year_diff'].idxmin()]
+        used_year = int(nearest['year'])
+
+    gini = row['gini'] if requested_year in df_country['year'].values else nearest['gini']
+    automation = row['automation'] if requested_year in df_country['year'].values else nearest['automation']
+    evcillestirme = row['evcillestirme'] if requested_year in df_country['year'].values else nearest['evcillestirme']
+    bilinc = row['bilinc'] if requested_year in df_country['year'].values else nearest['bilinc']
+    dis_direnc = row['dis_direnc'] if requested_year in df_country['year'].values else nearest['dis_direnc']
 
     calc = KESCalculator(alpha=alpha, beta=beta, gamma=gamma, lambd=lambd,
                          geometric=geometric, use_min=use_min)
@@ -55,7 +80,8 @@ def calculate():
 
     return jsonify({
         'country': country,
-        'year': year,
+        'used_year': used_year,
+        'requested_year': requested_year,
         'v_ic_score': round(v_ic, 2),
         'kes': round(kes, 2),
         'interpretation': 'Sermayeci Kutup' if kes < 33 else ('Kamucu Kutup' if kes > 66 else 'Karma / Geçiş')
@@ -114,7 +140,6 @@ def fetch_from_api():
         fetcher._save_record(country_name, row['year'], evcillestirme=row['evcillestirme'])
     
     return jsonify({'status': 'success', 'message': f'{country_name} verileri güncellendi.'})
-    
-    
+
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000)
