@@ -48,65 +48,53 @@ def available_years():
 
 @app.route('/calculate', methods=['POST'])
 def calculate():
-    try:
-        data = request.json
-        country = data['country']
-        requested_year = int(data['year'])
-        alpha = float(data.get('alpha', 0.5))
-        beta = float(data.get('beta', 0.5))
-        gamma = float(data.get('gamma', 0.5))
-        lambd = float(data.get('lambd', 0.5))
-        geometric = data.get('geometric', False)
-        use_min = data.get('use_min', False)
+    data = request.json
+    country = data['country']
+    requested_year = int(data['year'])
+    alpha = float(data.get('alpha', 0.5))
+    beta = float(data.get('beta', 0.5))
+    gamma = float(data.get('gamma', 0.5))
+    lambd = float(data.get('lambd', 0.5))
+    geometric = data.get('geometric', False)
+    use_min = data.get('use_min', False)
 
-        fetcher = DataFetcher()
-        df = fetcher.load_to_dataframe()
-        df_country = df[df['country'] == country]
-        
-        if df_country.empty:
-            return jsonify({'error': f'{country} için hiç veri yok. Lütfen "API\'den Çek" veya "Manuel Veri Girişi" yapın.'}), 404
+    fetcher = DataFetcher(world_bank_api_key=WORLD_BANK_API_KEY)
+    df = fetcher.load_to_dataframe()
+    df_country = df[df['country'] == country]
+    
+    if df_country.empty:
+        return jsonify({'error': f'{country} için hiç veri yok. Lütfen "API\'den Çek" veya "Manuel Veri Girişi" yapın.'}), 404
 
-        # İstenen yıl varsa onu kullan, yoksa en yakın yılı bul
-        if requested_year in df_country['year'].values:
-            row = df_country[df_country['year'] == requested_year].iloc[0]
-            used_year = requested_year
-        else:
-            df_country['year_diff'] = abs(df_country['year'] - requested_year)
-            nearest = df_country.loc[df_country['year_diff'].idxmin()]
-            used_year = int(nearest['year'])
-            row = nearest
+    # İstenen yıl varsa onu kullan, yoksa en yakın yılı bul
+    if requested_year in df_country['year'].values:
+        row = df_country[df_country['year'] == requested_year].iloc[0]
+        used_year = requested_year
+    else:
+        df_country['year_diff'] = abs(df_country['year'] - requested_year)
+        nearest = df_country.loc[df_country['year_diff'].idxmin()]
+        used_year = int(nearest['year'])
+        row = nearest
 
-        # Gerekli alanların varlığını kontrol et, eksikse varsayılan değer ata
-        gini = row.get('gini', 50)
-        automation = row.get('automation', 50)
-        evcillestirme = row.get('evcillestirme', 50)
-        bilinc = row.get('bilinc', 50)
-        dis_direnc = row.get('dis_direnc', 50)
-        
-        # NaN kontrolü
-        import numpy as np
-        if pd.isna(gini): gini = 50
-        if pd.isna(automation): automation = 50
-        if pd.isna(evcillestirme): evcillestirme = 50
-        if pd.isna(bilinc): bilinc = 50
-        if pd.isna(dis_direnc): dis_direnc = 50
+    # Eksik değerleri varsayılan değerlerle doldur (50 = nötr)
+    gini = float(row['gini']) if pd.notna(row['gini']) else 50.0
+    automation = float(row['automation']) if pd.notna(row['automation']) else 50.0
+    evcillestirme = float(row['evcillestirme']) if pd.notna(row['evcillestirme']) else 50.0
+    bilinc = float(row['bilinc']) if pd.notna(row['bilinc']) else 50.0
+    dis_direnc = float(row['dis_direnc']) if pd.notna(row['dis_direnc']) else 50.0
 
-        calc = KESCalculator(alpha=alpha, beta=beta, gamma=gamma, lambd=lambd,
-                             geometric=geometric, use_min=use_min)
-        v_ic = calc.calculate_v_ic(gini, automation, evcillestirme, bilinc)
-        kes = calc.calculate_kes(v_ic, dis_direnc)
+    calc = KESCalculator(alpha=alpha, beta=beta, gamma=gamma, lambd=lambd,
+                         geometric=geometric, use_min=use_min)
+    v_ic = calc.calculate_v_ic(gini, automation, evcillestirme, bilinc)
+    kes = calc.calculate_kes(v_ic, dis_direnc)
 
-        return jsonify({
-            'country': country,
-            'used_year': used_year,
-            'requested_year': requested_year,
-            'v_ic_score': round(v_ic, 2),
-            'kes': round(kes, 2),
-            'interpretation': 'Sermayeci Kutup' if kes < 33 else ('Kamucu Kutup' if kes > 66 else 'Karma / Geçiş')
-        })
-    except Exception as e:
-        traceback.print_exc()
-        return jsonify({'error': f'Sunucu hatası: {str(e)}'}), 500
+    return jsonify({
+        'country': country,
+        'used_year': used_year,
+        'requested_year': requested_year,
+        'v_ic_score': round(v_ic, 2),
+        'kes': round(kes, 2),
+        'interpretation': 'Sermayeci Kutup' if kes < 33 else ('Kamucu Kutup' if kes > 66 else 'Karma / Geçiş')
+    })
 
 @app.route('/trend', methods=['POST'])
 def trend():
