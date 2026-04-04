@@ -11,11 +11,12 @@
         .tab-content { display: none; padding: 20px; border: 1px solid #ddd; margin-top: 10px; border-radius: 5px; }
         .tab-content.active { display: block; }
         .form-group { margin-bottom: 15px; }
-        label { display: inline-block; width: 200px; font-weight: bold; }
-        select, input { padding: 5px; width: 250px; }
-        button { padding: 8px 15px; background: #3498db; color: white; border: none; cursor: pointer; margin-top: 10px; }
+        label { display: inline-block; width: 220px; font-weight: bold; }
+        select, input { padding: 5px; width: 260px; }
+        button { padding: 8px 15px; background: #3498db; color: white; border: none; cursor: pointer; margin-top: 10px; border-radius: 4px; }
         .result { background: #ecf0f1; padding: 15px; margin-top: 20px; border-radius: 5px; }
         .warning { color: #e67e22; }
+        .estimated { background-color: #fff3e0; border-left: 4px solid #e67e22; padding: 8px; margin: 10px 0; }
         table { border-collapse: collapse; width: 100%; margin-top: 20px; }
         th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
         th { background-color: #f2f2f2; }
@@ -25,7 +26,7 @@
 <body>
 <div class="container">
     <h1>📊 Kutup Eğilim Skoru (KES)</h1>
-    <p>Her katsayı için farklı veri kaynağı seçebilirsiniz.</p>
+    <p>Her katsayı için farklı veri kaynağı seçebilirsiniz. <span class="warning">Sarı arka planlı değerler</span> varsayılan (50) veya tahmini veriyi ifade eder.</p>
 
     <div>
         <button class="tab-button active" onclick="openTab('calculate')">Hesapla</button>
@@ -64,10 +65,10 @@
             <input type="number" id="lambd" step="0.05" value="0.5">
         </div>
         <div class="form-group">
-            <label><input type="checkbox" id="geometric"> Geometrik formül</label>
+            <label><input type="checkbox" id="geometric"> Geometrik formül (K = V_iç * √(V_dış)/10)</label>
         </div>
         <div class="form-group">
-            <label><input type="checkbox" id="use_min"> Min formülü</label>
+            <label><input type="checkbox" id="use_min"> Min formülü (K = min(V_iç, V_dış))</label>
         </div>
         <button onclick="calculateKES()">Hesapla</button>
         <div id="result" class="result"></div>
@@ -204,16 +205,28 @@ async function calculateKES() {
         if (data.status === 'error') {
             resultDiv.innerHTML = `<span class="warning">Hata: ${data.message}</span>`;
         } else {
-            let yearMsg = '';
-            if (data.used_years) {
-                yearMsg = '<p><strong>Kullanılan yıllar:</strong><br>';
-                for (const [k, v] of Object.entries(data.used_years)) {
-                    yearMsg += `${k}: ${v}<br>`;
-                }
-                yearMsg += '</p>';
+            let yearMsg = '<p><strong>Kullanılan yıllar:</strong><br>';
+            for (const [k, v] of Object.entries(data.used_years)) {
+                yearMsg += `${k}: ${v}<br>`;
             }
+            yearMsg += '</p>';
+            
+            let estimatedMsg = '';
+            let anyEstimated = false;
+            for (const [k, v] of Object.entries(data.estimated)) {
+                if (v === 1) anyEstimated = true;
+            }
+            if (anyEstimated) {
+                estimatedMsg = '<div class="estimated"><strong>⚠️ Uyarı:</strong> Aşağıdaki katsayılar için tahmini (varsayılan 50) değer kullanılmıştır:<br>';
+                for (const [k, v] of Object.entries(data.estimated)) {
+                    if (v === 1) estimatedMsg += `- ${k}<br>`;
+                }
+                estimatedMsg += '</div>';
+            }
+            
             resultDiv.innerHTML = `
                 ${yearMsg}
+                ${estimatedMsg}
                 <p><strong>KES:</strong> ${data.kes} (${data.interpretation})</p>
                 <p><strong>V_iç Skoru:</strong> ${data.v_ic}</p>
                 <p><em>Yorum: 0-33 Sermayeci, 34-66 Karma, 67-100 Kamucu</em></p>
@@ -266,8 +279,7 @@ async function saveManual() {
     const manualResult = document.getElementById('manual_result');
     if (result.status === 'success') {
         manualResult.innerHTML = `<span style="color:green">${result.message}</span>`;
-        // Kaynak seçeneklerini yenile
-        loadSourceOptions();
+        loadSourceOptions(); // Kaynak listesini yenile (manuel kaynak görünsün)
     } else {
         manualResult.innerHTML = `<span class="warning">${result.message}</span>`;
     }
