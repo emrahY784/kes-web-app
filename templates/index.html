@@ -1,3 +1,123 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <title>KES - Kutup Eğilim Skoru</title>
+    <style>
+        body { font-family: Arial; margin: 20px; background: #f4f4f9; }
+        .container { max-width: 1000px; margin: auto; background: white; padding: 20px; border-radius: 8px; }
+        .tab-button { background: #ddd; padding: 10px 20px; cursor: pointer; border: none; }
+        .tab-button.active { background: #3498db; color: white; }
+        .tab-content { display: none; padding: 20px; }
+        .tab-content.active { display: block; }
+        input, select, button { margin: 5px; padding: 8px; }
+        .result { background: #ecf0f1; padding: 15px; margin-top: 20px; border-radius: 5px; }
+        .year-list { background: #e8f4f8; margin-top: 10px; padding: 8px; border-radius: 4px; font-size: 0.9em; }
+        .error { color: red; }
+        .success { color: green; }
+    </style>
+    <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
+</head>
+<body>
+<div class="container">
+    <h1>📊 Kutup Eğilim Skoru (KES)</h1>
+    <div>
+        <button class="tab-button active" onclick="openTab('calculate')">Hesapla</button>
+        <button class="tab-button" onclick="openTab('trend')">Trend</button>
+        <button class="tab-button" onclick="openTab('manual')">Manuel Veri Girişi</button>
+        <button class="tab-button" onclick="openTab('api')">API'den Çek</button>
+    </div>
+
+    <div id="calculate" class="tab-content active">
+        <h3>Hesapla</h3>
+        <label>Ülke: 
+            <select id="country" onchange="getAvailableYears()">
+                {% for c in countries %}
+                <option value="{{ c.name }}">{{ c.name }}</option>
+                {% endfor %}
+            </select>
+        </label>
+        <label>Yıl: <input type="number" id="year" value="2023"></label>
+        <button type="button" onclick="getAvailableYears()">Mevcut Yılları Göster</button>
+        <div id="year_list" class="year-list"></div>
+        
+        <label>α (Gini): <input type="number" id="alpha" step="0.05" value="0.5"></label>
+        <label>β (Otomasyon): <input type="number" id="beta" step="0.05" value="0.5"></label>
+        <label>γ (Evcilleştirme): <input type="number" id="gamma" step="0.05" value="0.5"></label>
+        <label>λ (Bilinç): <input type="number" id="lambd" step="0.05" value="0.5"></label>
+        <label><input type="checkbox" id="geometric"> Geometrik formül</label>
+        <label><input type="checkbox" id="use_min"> Min formülü</label>
+        <button onclick="calculate()">Hesapla</button>
+        <div id="result" class="result"></div>
+    </div>
+
+    <div id="trend" class="tab-content">
+        <h3>Trend</h3>
+        <label>Ülke: <select id="trend_country">
+            {% for c in countries %}
+            <option value="{{ c.name }}">{{ c.name }}</option>
+            {% endfor %}
+        </select></label>
+        <label>Başlangıç Yılı: <input type="number" id="start_year" value="2000"></label>
+        <label>Bitiş Yılı: <input type="number" id="end_year" value="2024"></label>
+        <button onclick="loadTrend()">Grafiği Göster</button>
+        <div id="trend_graph"></div>
+    </div>
+
+    <div id="manual" class="tab-content">
+        <h3>Manuel Veri Girişi</h3>
+        <label>Ülke: <input type="text" id="manual_country" placeholder="Turkey"></label>
+        <label>Yıl: <input type="number" id="manual_year" placeholder="2023"></label>
+        <label>Gini (0-100): <input type="number" id="manual_gini" step="0.1"></label>
+        <label>Otomasyon (0-100): <input type="number" id="manual_automation" step="0.1"></label>
+        <label>Evcilleştirme (0-100): <input type="number" id="manual_evcillestirme" step="0.1"></label>
+        <label>Bilinç (0-100): <input type="number" id="manual_bilinc" step="0.1"></label>
+        <label>Dış Direnç (0-100): <input type="number" id="manual_dis_direnc" step="0.1"></label>
+        <button onclick="saveManual()">Kaydet</button>
+        <div id="manual_result" class="result"></div>
+    </div>
+
+    <div id="api" class="tab-content">
+        <h3>API'den Otomatik Veri Çek</h3>
+        <label>Ülke Kodu: <input type="text" id="api_code" placeholder="TUR" style="width:80px"></label>
+        <label>Ülke Adı: <input type="text" id="api_name" placeholder="Turkey"></label>
+        <button onclick="fetchFromAPI()">Dünya Bankası'ndan Gini ve Yönetişim Verilerini Çek</button>
+        <div id="api_result" class="result"></div>
+    </div>
+</div>
+
+<script>
+function openTab(tabName) {
+    document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
+    document.querySelectorAll('.tab-button').forEach(b => b.classList.remove('active'));
+    document.getElementById(tabName).classList.add('active');
+    event.currentTarget.classList.add('active');
+}
+
+async function getAvailableYears() {
+    const country = document.getElementById('country').value;
+    const yearListDiv = document.getElementById('year_list');
+    if (!country) return;
+    yearListDiv.innerHTML = 'Yükleniyor...';
+    try {
+        const res = await fetch('/available_years', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ country: country })
+        });
+        const data = await res.json();
+        if (data.error) {
+            yearListDiv.innerHTML = `<span class="error">⚠️ ${data.error}</span>`;
+        } else if (data.years && data.years.length > 0) {
+            yearListDiv.innerHTML = '<strong>Mevcut yıllar:</strong> ' + data.years.join(', ');
+        } else {
+            yearListDiv.innerHTML = '<span class="error">⚠️ Bu ülke için henüz veri yok. Lütfen "API\'den Çek" veya "Manuel Veri Girişi" yapın.</span>';
+        }
+    } catch (err) {
+        yearListDiv.innerHTML = `<span class="error">⚠️ Sunucu hatası: ${err.message}</span>`;
+    }
+}
+
 async function calculate() {
     const country = document.getElementById('country').value;
     const year = parseInt(document.getElementById('year').value);
@@ -16,16 +136,9 @@ async function calculate() {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ country, year, alpha, beta, gamma, lambd, geometric, use_min })
         });
-        const text = await res.text();  // Önce text olarak al
-        let result;
-        try {
-            result = JSON.parse(text);
-        } catch(e) {
-            resultDiv.innerHTML = `<p style="color:red">Sunucu yanıtı JSON değil. İlk 200 karakter: ${text.substring(0,200)}</p>`;
-            return;
-        }
+        const result = await res.json();
         if (result.error) {
-            resultDiv.innerHTML = `<p style="color:red">${result.error}</p>`;
+            resultDiv.innerHTML = `<span class="error">${result.error}</span>`;
         } else {
             let yearMsg = '';
             if (result.used_year !== result.requested_year) {
@@ -39,6 +152,90 @@ async function calculate() {
             `;
         }
     } catch (err) {
-        resultDiv.innerHTML = `<p style="color:red">Ağ hatası: ${err.message}</p>`;
+        resultDiv.innerHTML = `<span class="error">Sunucu hatası: ${err.message}</span>`;
     }
 }
+
+async function loadTrend() {
+    const country = document.getElementById('trend_country').value;
+    const start_year = parseInt(document.getElementById('start_year').value);
+    const end_year = parseInt(document.getElementById('end_year').value);
+    const graphDiv = document.getElementById('trend_graph');
+    graphDiv.innerHTML = 'Yükleniyor...';
+    try {
+        const res = await fetch('/trend', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ country, start_year, end_year })
+        });
+        const result = await res.json();
+        if (result.error) {
+            graphDiv.innerHTML = `<span class="error">${result.error}</span>`;
+        } else {
+            const graph = JSON.parse(result.graph);
+            Plotly.newPlot('trend_graph', graph.data, graph.layout);
+        }
+    } catch (err) {
+        graphDiv.innerHTML = `<span class="error">Hata: ${err.message}</span>`;
+    }
+}
+
+async function saveManual() {
+    const data = {
+        country: document.getElementById('manual_country').value,
+        year: parseInt(document.getElementById('manual_year').value),
+        gini: parseFloat(document.getElementById('manual_gini').value),
+        automation: parseFloat(document.getElementById('manual_automation').value),
+        evcillestirme: parseFloat(document.getElementById('manual_evcillestirme').value),
+        bilinc: parseFloat(document.getElementById('manual_bilinc').value),
+        dis_direnc: parseFloat(document.getElementById('manual_dis_direnc').value)
+    };
+    const resultDiv = document.getElementById('manual_result');
+    resultDiv.innerHTML = 'Kaydediliyor...';
+    try {
+        const res = await fetch('/manual_data', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(data)
+        });
+        const result = await res.json();
+        if (result.error) {
+            resultDiv.innerHTML = `<span class="error">${result.error}</span>`;
+        } else {
+            resultDiv.innerHTML = `<span class="success">${result.message}</span>`;
+            if (document.getElementById('country').value === data.country) getAvailableYears();
+        }
+    } catch (err) {
+        resultDiv.innerHTML = `<span class="error">Hata: ${err.message}</span>`;
+    }
+}
+
+async function fetchFromAPI() {
+    const code = document.getElementById('api_code').value;
+    const name = document.getElementById('api_name').value;
+    const resultDiv = document.getElementById('api_result');
+    resultDiv.innerHTML = 'Veri çekiliyor...';
+    try {
+        const res = await fetch('/fetch_from_api', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ code, name })
+        });
+        const result = await res.json();
+        if (result.error) {
+            resultDiv.innerHTML = `<span class="error">${result.error}</span>`;
+        } else {
+            resultDiv.innerHTML = `<span class="success">${result.message}</span>`;
+            if (document.getElementById('country').value === name) getAvailableYears();
+        }
+    } catch (err) {
+        resultDiv.innerHTML = `<span class="error">Hata: ${err.message}</span>`;
+    }
+}
+
+window.onload = function() {
+    getAvailableYears();
+};
+</script>
+</body>
+</html>
