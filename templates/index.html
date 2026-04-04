@@ -12,6 +12,7 @@
         .tab-content.active { display: block; }
         input, select, button { margin: 5px; padding: 8px; }
         .result { background: #ecf0f1; padding: 15px; margin-top: 20px; border-radius: 5px; }
+        .year-list { background: #e8f4f8; margin-top: 10px; padding: 8px; border-radius: 4px; font-size: 0.9em; }
     </style>
     <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
 </head>
@@ -27,18 +28,23 @@
 
     <div id="calculate" class="tab-content active">
         <h3>Hesapla</h3>
-        <label>Ülke: <select id="country">
-            {% for c in countries %}
-            <option value="{{ c.name }}">{{ c.name }}</option>
-            {% endfor %}
-        </select></label>
+        <label>Ülke: 
+            <select id="country" onchange="getAvailableYears()">
+                {% for c in countries %}
+                <option value="{{ c.name }}">{{ c.name }}</option>
+                {% endfor %}
+            </select>
+        </label>
         <label>Yıl: <input type="number" id="year" value="2023"></label>
-        <label>α: <input type="number" id="alpha" step="0.05" value="0.5"></label>
-        <label>β: <input type="number" id="beta" step="0.05" value="0.5"></label>
-        <label>γ: <input type="number" id="gamma" step="0.05" value="0.5"></label>
-        <label>λ: <input type="number" id="lambd" step="0.05" value="0.5"></label>
-        <label><input type="checkbox" id="geometric"> Geometrik</label>
-        <label><input type="checkbox" id="use_min"> Min</label>
+        <button type="button" onclick="getAvailableYears()">Mevcut Yılları Göster</button>
+        <div id="year_list" class="year-list"></div>
+        
+        <label>α (Gini): <input type="number" id="alpha" step="0.05" value="0.5"></label>
+        <label>β (Otomasyon): <input type="number" id="beta" step="0.05" value="0.5"></label>
+        <label>γ (Evcilleştirme): <input type="number" id="gamma" step="0.05" value="0.5"></label>
+        <label>λ (Bilinç): <input type="number" id="lambd" step="0.05" value="0.5"></label>
+        <label><input type="checkbox" id="geometric"> Geometrik formül</label>
+        <label><input type="checkbox" id="use_min"> Min formülü</label>
         <button onclick="calculate()">Hesapla</button>
         <div id="result" class="result"></div>
     </div>
@@ -86,27 +92,49 @@ function openTab(tabName) {
     event.currentTarget.classList.add('active');
 }
 
+async function getAvailableYears() {
+    const country = document.getElementById('country').value;
+    if (!country) return;
+    const res = await fetch('/available_years', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ country: country })
+    });
+    const data = await res.json();
+    const yearListDiv = document.getElementById('year_list');
+    if (data.years && data.years.length > 0) {
+        yearListDiv.innerHTML = '<strong>Mevcut yıllar:</strong> ' + data.years.join(', ');
+    } else {
+        yearListDiv.innerHTML = '⚠️ Bu ülke için henüz veri yok. Lütfen "API\'den Çek" veya "Manuel Veri Girişi" yapın.';
+    }
+}
+
 async function calculate() {
-    const data = {
-        country: document.getElementById('country').value,
-        year: document.getElementById('year').value,
-        alpha: parseFloat(document.getElementById('alpha').value),
-        beta: parseFloat(document.getElementById('beta').value),
-        gamma: parseFloat(document.getElementById('gamma').value),
-        lambd: parseFloat(document.getElementById('lambd').value),
-        geometric: document.getElementById('geometric').checked,
-        use_min: document.getElementById('use_min').checked
-    };
+    const country = document.getElementById('country').value;
+    const year = parseInt(document.getElementById('year').value);
+    const alpha = parseFloat(document.getElementById('alpha').value);
+    const beta = parseFloat(document.getElementById('beta').value);
+    const gamma = parseFloat(document.getElementById('gamma').value);
+    const lambd = parseFloat(document.getElementById('lambd').value);
+    const geometric = document.getElementById('geometric').checked;
+    const use_min = document.getElementById('use_min').checked;
+
     const res = await fetch('/calculate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(data)
+        body: JSON.stringify({ country, year, alpha, beta, gamma, lambd, geometric, use_min })
     });
     const result = await res.json();
+    const resultDiv = document.getElementById('result');
     if (result.error) {
-        document.getElementById('result').innerHTML = `<p style="color:red">${result.error}</p>`;
+        resultDiv.innerHTML = `<p style="color:red">${result.error}</p>`;
     } else {
-        document.getElementById('result').innerHTML = `
+        let yearMsg = '';
+        if (result.used_year !== result.requested_year) {
+            yearMsg = `<p><em>⚠️ İstenen yıl (${result.requested_year}) için veri yoktu. En yakın yıl (${result.used_year}) kullanıldı.</em></p>`;
+        }
+        resultDiv.innerHTML = `
+            ${yearMsg}
             <p><strong>KES:</strong> ${result.kes} (${result.interpretation})</p>
             <p><strong>V_iç Skoru:</strong> ${result.v_ic_score}</p>
             <p><em>Yorum: 0-33 Sermayeci, 34-66 Karma, 67-100 Kamucu</em></p>
@@ -115,15 +143,13 @@ async function calculate() {
 }
 
 async function loadTrend() {
-    const data = {
-        country: document.getElementById('trend_country').value,
-        start_year: document.getElementById('start_year').value,
-        end_year: document.getElementById('end_year').value
-    };
+    const country = document.getElementById('trend_country').value;
+    const start_year = parseInt(document.getElementById('start_year').value);
+    const end_year = parseInt(document.getElementById('end_year').value);
     const res = await fetch('/trend', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(data)
+        body: JSON.stringify({ country, start_year, end_year })
     });
     const result = await res.json();
     if (result.error) {
@@ -137,7 +163,7 @@ async function loadTrend() {
 async function saveManual() {
     const data = {
         country: document.getElementById('manual_country').value,
-        year: document.getElementById('manual_year').value,
+        year: parseInt(document.getElementById('manual_year').value),
         gini: parseFloat(document.getElementById('manual_gini').value),
         automation: parseFloat(document.getElementById('manual_automation').value),
         evcillestirme: parseFloat(document.getElementById('manual_evcillestirme').value),
@@ -151,21 +177,34 @@ async function saveManual() {
     });
     const result = await res.json();
     document.getElementById('manual_result').innerHTML = `<p>${result.message}</p>`;
+    // Kayıt sonrası o ülke için yılları güncellemek için (eğer aynı ülke seçiliyse)
+    const selectedCountry = document.getElementById('country').value;
+    if (selectedCountry === data.country) {
+        getAvailableYears();
+    }
 }
 
 async function fetchFromAPI() {
-    const data = {
-        code: document.getElementById('api_code').value,
-        name: document.getElementById('api_name').value
-    };
+    const code = document.getElementById('api_code').value;
+    const name = document.getElementById('api_name').value;
     const res = await fetch('/fetch_from_api', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(data)
+        body: JSON.stringify({ code, name })
     });
     const result = await res.json();
     document.getElementById('api_result').innerHTML = `<p>${result.message}</p>`;
+    // API çekimi sonrası, eğer bu ülke seçiliyse yılları yenile
+    const selectedCountry = document.getElementById('country').value;
+    if (selectedCountry === name) {
+        getAvailableYears();
+    }
 }
+
+// Sayfa yüklendiğinde ilk ülke için mevcut yılları göster
+window.onload = function() {
+    getAvailableYears();
+};
 </script>
 </body>
 </html>
