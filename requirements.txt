@@ -1,7 +1,0 @@
-flask
-pandas
-numpy
-plotly
-openpyxl
-requests
-gunicorn
