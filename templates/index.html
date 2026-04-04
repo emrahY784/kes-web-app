@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <title>KES - Kutup Eğilim Skoru</title>
+    <style>
+        body { font-family: Arial; margin: 20px; background: #f4f4f9; }
+        .container { max-width: 1000px; margin: auto; background: white; padding: 20px; border-radius: 8px; }
+        .tab-button { background: #ddd; padding: 10px 20px; cursor: pointer; border: none; }
+        .tab-button.active { background: #3498db; color: white; }
+        .tab-content { display: none; padding: 20px; }
+        .tab-content.active { display: block; }
+        input, select, button { margin: 5px; padding: 8px; }
+        .result { background: #ecf0f1; padding: 15px; margin-top: 20px; border-radius: 5px; }
+    </style>
+    <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
+</head>
+<body>
+<div class="container">
+    <h1>📊 Kutup Eğilim Skoru (KES)</h1>
+    <div>
+        <button class="tab-button active" onclick="openTab('calculate')">Hesapla</button>
+        <button class="tab-button" onclick="openTab('trend')">Trend</button>
+        <button class="tab-button" onclick="openTab('manual')">Manuel Veri Girişi</button>
+        <button class="tab-button" onclick="openTab('api')">API'den Çek</button>
+    </div>
+
+    <div id="calculate" class="tab-content active">
+        <h3>Hesapla</h3>
+        <label>Ülke: <select id="country">
+            {% for c in countries %}
+            <option value="{{ c.name }}">{{ c.name }}</option>
+            {% endfor %}
+        </select></label>
+        <label>Yıl: <input type="number" id="year" value="2023"></label>
+        <label>α: <input type="number" id="alpha" step="0.05" value="0.5"></label>
+        <label>β: <input type="number" id="beta" step="0.05" value="0.5"></label>
+        <label>γ: <input type="number" id="gamma" step="0.05" value="0.5"></label>
+        <label>λ: <input type="number" id="lambd" step="0.05" value="0.5"></label>
+        <label><input type="checkbox" id="geometric"> Geometrik</label>
+        <label><input type="checkbox" id="use_min"> Min</label>
+        <button onclick="calculate()">Hesapla</button>
+        <div id="result" class="result"></div>
+    </div>
+
+    <div id="trend" class="tab-content">
+        <h3>Trend</h3>
+        <label>Ülke: <select id="trend_country">
+            {% for c in countries %}
+            <option value="{{ c.name }}">{{ c.name }}</option>
+            {% endfor %}
+        </select></label>
+        <label>Başlangıç Yılı: <input type="number" id="start_year" value="2000"></label>
+        <label>Bitiş Yılı: <input type="number" id="end_year" value="2024"></label>
+        <button onclick="loadTrend()">Grafiği Göster</button>
+        <div id="trend_graph"></div>
+    </div>
+
+    <div id="manual" class="tab-content">
+        <h3>Manuel Veri Girişi</h3>
+        <label>Ülke: <input type="text" id="manual_country" placeholder="Turkey"></label>
+        <label>Yıl: <input type="number" id="manual_year" placeholder="2023"></label>
+        <label>Gini (0-100): <input type="number" id="manual_gini" step="0.1"></label>
+        <label>Otomasyon (0-100): <input type="number" id="manual_automation" step="0.1"></label>
+        <label>Evcilleştirme (0-100): <input type="number" id="manual_evcillestirme" step="0.1"></label>
+        <label>Bilinç (0-100): <input type="number" id="manual_bilinc" step="0.1"></label>
+        <label>Dış Direnç (0-100): <input type="number" id="manual_dis_direnc" step="0.1"></label>
+        <button onclick="saveManual()">Kaydet</button>
+        <div id="manual_result" class="result"></div>
+    </div>
+
+    <div id="api" class="tab-content">
+        <h3>API'den Otomatik Veri Çek</h3>
+        <label>Ülke Kodu: <input type="text" id="api_code" placeholder="TUR"></label>
+        <label>Ülke Adı: <input type="text" id="api_name" placeholder="Turkey"></label>
+        <button onclick="fetchFromAPI()">Dünya Bankası'ndan Gini ve Yönetişim Verilerini Çek</button>
+        <div id="api_result" class="result"></div>
+    </div>
+</div>
+
+<script>
+function openTab(tabName) {
+    document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
+    document.querySelectorAll('.tab-button').forEach(b => b.classList.remove('active'));
+    document.getElementById(tabName).classList.add('active');
+    event.currentTarget.classList.add('active');
+}
+
+async function calculate() {
+    const data = {
+        country: document.getElementById('country').value,
+        year: document.getElementById('year').value,
+        alpha: parseFloat(document.getElementById('alpha').value),
+        beta: parseFloat(document.getElementById('beta').value),
+        gamma: parseFloat(document.getElementById('gamma').value),
+        lambd: parseFloat(document.getElementById('lambd').value),
+        geometric: document.getElementById('geometric').checked,
+        use_min: document.getElementById('use_min').checked
+    };
+    const res = await fetch('/calculate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data)
+    });
+    const result = await res.json();
+    if (result.error) {
+        document.getElementById('result').innerHTML = `<p style="color:red">${result.error}</p>`;
+    } else {
+        document.getElementById('result').innerHTML = `
+            <p><strong>KES:</strong> ${result.kes} (${result.interpretation})</p>
+            <p><strong>V_iç Skoru:</strong> ${result.v_ic_score}</p>
+            <p><em>Yorum: 0-33 Sermayeci, 34-66 Karma, 67-100 Kamucu</em></p>
+        `;
+    }
+}
+
+async function loadTrend() {
+    const data = {
+        country: document.getElementById('trend_country').value,
+        start_year: document.getElementById('start_year').value,
+        end_year: document.getElementById('end_year').value
+    };
+    const res = await fetch('/trend', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data)
+    });
+    const result = await res.json();
+    if (result.error) {
+        document.getElementById('trend_graph').innerHTML = `<p style="color:red">${result.error}</p>`;
+    } else {
+        const graph = JSON.parse(result.graph);
+        Plotly.newPlot('trend_graph', graph.data, graph.layout);
+    }
+}
+
+async function saveManual() {
+    const data = {
+        country: document.getElementById('manual_country').value,
+        year: document.getElementById('manual_year').value,
+        gini: parseFloat(document.getElementById('manual_gini').value),
+        automation: parseFloat(document.getElementById('manual_automation').value),
+        evcillestirme: parseFloat(document.getElementById('manual_evcillestirme').value),
+        bilinc: parseFloat(document.getElementById('manual_bilinc').value),
+        dis_direnc: parseFloat(document.getElementById('manual_dis_direnc').value)
+    };
+    const res = await fetch('/manual_data', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data)
+    });
+    const result = await res.json();
+    document.getElementById('manual_result').innerHTML = `<p>${result.message}</p>`;
+}
+
+async function fetchFromAPI() {
+    const data = {
+        code: document.getElementById('api_code').value,
+        name: document.getElementById('api_name').value
+    };
+    const res = await fetch('/fetch_from_api', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data)
+    });
+    const result = await res.json();
+    document.getElementById('api_result').innerHTML = `<p>${result.message}</p>`;
+}
+</script>
+</body>
+</html>
