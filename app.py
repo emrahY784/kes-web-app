@@ -27,7 +27,7 @@ def index():
     except Exception as e:
         return f"<h1>Hata</h1><pre>{traceback.format_exc()}</pre>", 500
 
-# Yeni: Bir ülke için mevcut yılları döndürür
+# Bir ülke için mevcut yılları döndürür
 @app.route('/available_years', methods=['POST'])
 def available_years():
     data = request.json
@@ -66,12 +66,13 @@ def calculate():
         df_country['year_diff'] = abs(df_country['year'] - requested_year)
         nearest = df_country.loc[df_country['year_diff'].idxmin()]
         used_year = int(nearest['year'])
+        row = nearest
 
-    gini = row['gini'] if requested_year in df_country['year'].values else nearest['gini']
-    automation = row['automation'] if requested_year in df_country['year'].values else nearest['automation']
-    evcillestirme = row['evcillestirme'] if requested_year in df_country['year'].values else nearest['evcillestirme']
-    bilinc = row['bilinc'] if requested_year in df_country['year'].values else nearest['bilinc']
-    dis_direnc = row['dis_direnc'] if requested_year in df_country['year'].values else nearest['dis_direnc']
+    gini = row['gini']
+    automation = row['automation']
+    evcillestirme = row['evcillestirme']
+    bilinc = row['bilinc']
+    dis_direnc = row['dis_direnc']
 
     calc = KESCalculator(alpha=alpha, beta=beta, gamma=gamma, lambd=lambd,
                          geometric=geometric, use_min=use_min)
@@ -127,19 +128,47 @@ def manual_data():
 @app.route('/fetch_from_api', methods=['POST'])
 def fetch_from_api():
     data = request.json
-    country_code = data['code']
-    country_name = data['name']
+    country_code = data.get('code')
+    country_name = data.get('name')
+    
+    # Eğer sadece name gönderildiyse, kodu bul
+    if not country_code and country_name:
+        code_map = {c['name']: c['code'] for c in COUNTRIES}
+        country_code = code_map.get(country_name)
+        if not country_code:
+            return jsonify({'error': f'{country_name} için ülke kodu bulunamadı.'}), 400
+        country_name = country_name
+    elif not country_code or not country_name:
+        return jsonify({'error': 'Lütfen hem ülke kodu hem de ülke adı girin.'}), 400
 
     fetcher = DataFetcher(world_bank_api_key=WORLD_BANK_API_KEY)
+    
+    # Gini verilerini çek
     gini_df = fetcher.fetch_world_bank_gini(country_code)
+    gini_count = 0
     for _, row in gini_df.iterrows():
         fetcher._save_record(country_name, row['year'], gini=row['gini'])
+        gini_count += 1
     
+    # Yönetişim verilerini çek
     gov_df = fetcher.fetch_wb_governance(country_code)
+    gov_count = 0
     for _, row in gov_df.iterrows():
         fetcher._save_record(country_name, row['year'], evcillestirme=row['evcillestirme'])
+        gov_count += 1
     
-    return jsonify({'status': 'success', 'message': f'{country_name} verileri güncellendi.'})
+    if gini_count == 0 and gov_count == 0:
+        return jsonify({'error': f'{country_name} için API\'den veri alınamadı. Ülke kodu "{country_code}" geçerli mi?'}), 404
+    
+    return jsonify({'status': 'success', 'message': f'{country_name} için {gini_count} Gini, {gov_count} yönetişim kaydı eklendi/güncellendi.'})
+
+@app.route('/debug_db')
+def debug_db():
+    fetcher = DataFetcher()
+    df = fetcher.load_to_dataframe()
+    if df.empty:
+        return "Veritabanı boş."
+    return df.to_html()
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000)
