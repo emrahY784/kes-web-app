@@ -153,50 +153,37 @@ def manual_data():
 
 @app.route('/fetch_from_api', methods=['POST'])
 def fetch_from_api():
-    try:
-        data = request.json
-        country_name = data['name']
-        
-        country_code = COUNTRY_NAME_TO_CODE.get(country_name)
-        if not country_code:
-            return jsonify({'error': f'"{country_name}" için kod bulunamadı. Lütfen geçerli bir ülke adı girin.'}), 400
+    data = request.json
+    country_name = data['name']
+    
+    country_code = COUNTRY_TO_CODE.get(country_name)
+    if not country_code:
+        return jsonify({'error': f'"{country_name}" için kod bulunamadı.'}), 400
 
-        fetcher = DataFetcher(world_bank_api_key=WORLD_BANK_API_KEY)
-        
-        # Gini verilerini çek
-        gini_df = fetcher.fetch_world_bank_gini(country_code)
-        gini_count = 0
-        for _, row in gini_df.iterrows():
-            fetcher._save_record(country_name, row['year'], gini=row['gini'])
-            gini_count += 1
-        
-        # Yönetişim verilerini çek (evcilleştirme)
-        gov_df = fetcher.fetch_wb_governance(country_code)
-        gov_count = 0
-        for _, row in gov_df.iterrows():
-            # Önce kayıt var mı kontrol et, varsa sadece evcillestirme alanını güncelle
-            # Basitçe _save_record diğer alanları korumaz, o yüzden önce mevcut kaydı alalım
-            existing = fetcher.load_to_dataframe()
-            existing_row = existing[(existing['country'] == country_name) & (existing['year'] == row['year'])]
-            if not existing_row.empty:
-                # Mevcut verileri koru, sadece evcillestirme alanını güncelle
-                current = existing_row.iloc[0]
-                fetcher._save_record(
-                    country_name, row['year'],
-                    gini=current.get('gini'),
-                    automation=current.get('automation'),
-                    evcillestirme=row['evcillestirme'],
-                    bilinc=current.get('bilinc'),
-                    dis_direnc=current.get('dis_direnc')
-                )
-            else:
-                fetcher._save_record(country_name, row['year'], evcillestirme=row['evcillestirme'])
-            gov_count += 1
-        
-        return jsonify({'status': 'success', 'message': f'{country_name} için {gini_count} Gini, {gov_count} yönetişim kaydı eklendi/güncellendi.'})
-    except Exception as e:
-        traceback.print_exc()
-        return jsonify({'error': str(e)}), 500
+    fetcher = DataFetcher(world_bank_api_key=WORLD_BANK_API_KEY)
+    
+    # Gini verilerini çek
+    gini_df = fetcher.fetch_world_bank_gini(country_code)
+    for _, row in gini_df.iterrows():
+        # automation ve bilinc için varsayılan 50, dis_direnc için de 50 (manuel girilmesi gerekir)
+        fetcher._save_record(country_name, row['year'], 
+                             gini=row['gini'], 
+                             automation=50.0, 
+                             evcillestirme=None, 
+                             bilinc=50.0, 
+                             dis_direnc=50.0)
+    
+    # Yönetişim verilerini çek (evcillestirme)
+    gov_df = fetcher.fetch_wb_governance(country_code)
+    for _, row in gov_df.iterrows():
+        # Önce bu yıl için varsa kaydı güncelle, yoksa yeni oluştur
+        fetcher._save_record(country_name, row['year'], 
+                             evcillestirme=row['evcillestirme'],
+                             automation=50.0,
+                             bilinc=50.0,
+                             dis_direnc=50.0)
+    
+    return jsonify({'status': 'success', 'message': f'{country_name} verileri güncellendi. NOT: Otomasyon ve Bilinç için varsayılan (50) değeri kullanıldı. Gerçek değerler için "Manuel Veri Girişi" yapınız.'})
 
 @app.route('/debug_db')
 def debug_db():
