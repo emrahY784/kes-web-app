@@ -4,18 +4,15 @@ import plotly.express as px
 import plotly.utils
 import json
 import traceback
-import os
 from kes_calculator import KESCalculator
 from data_fetcher import DataFetcher
 
 app = Flask(__name__)
 
-# Örnek ülke listesi (sadece arayüzde kolaylık için, kullanıcı istediğini yazabilir)
-EXAMPLE_COUNTRIES = ['Turkey', 'United States', 'Germany', 'China', 'Russia']
-
 @app.route('/')
 def index():
-    return render_template('index.html', countries=EXAMPLE_COUNTRIES)
+    # Artık ülke listesi göndermiyoruz, manuel giriş yapılacak
+    return render_template('index.html')
 
 @app.route('/available_years', methods=['POST'])
 def available_years():
@@ -109,7 +106,6 @@ def trend():
         if df_country.empty:
             return jsonify({'error': f'{country} için trend verisi yok'}), 404
 
-        # Eğer 'kes' sütunu yoksa hesapla
         if 'kes' not in df_country.columns:
             kes_list = []
             for _, row in df_country.iterrows():
