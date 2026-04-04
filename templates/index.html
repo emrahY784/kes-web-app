@@ -17,15 +17,14 @@
         .error { color: #e74c3c; }
         label { display: inline-block; width: 180px; margin-bottom: 8px; }
         .form-group { margin-bottom: 12px; }
-        hr { margin: 20px 0; }
     </style>
     <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
 </head>
 <body>
 <div class="container">
     <h1>📊 Kutup Eğilim Skoru (KES)</h1>
-    <p>Ülkelerin sermayeci veya kamucu kutba eğilimini hesaplar (0-100).</p>
-    
+    <p>Ülkelerin sermayeci veya kamucu kutba eğilimini hesaplar (0-100). Ülke adını manuel girin.</p>
+
     <div>
         <button class="tab-button active" onclick="openTab('calculate')">Hesapla</button>
         <button class="tab-button" onclick="openTab('trend')">Trend</button>
@@ -38,11 +37,7 @@
         <h3>Kutup Eğilim Skoru Hesapla</h3>
         <div class="form-group">
             <label>Ülke:</label>
-            <select id="country">
-                {% for c in countries %}
-                <option value="{{ c }}">{{ c }}</option>
-                {% endfor %}
-            </select>
+            <input type="text" id="country" placeholder="Örnek: Turkey, USA, Germany" value="Turkey">
         </div>
         <div class="form-group">
             <label>Yıl:</label>
@@ -50,7 +45,7 @@
             <button type="button" onclick="getAvailableYears()" style="margin-left:10px;">Mevcut Yılları Göster</button>
         </div>
         <div id="year_list" class="year-list"></div>
-        
+
         <div class="form-group">
             <label>α (Gini ağırlığı):</label>
             <input type="number" id="alpha" step="0.05" value="0.5">
@@ -76,17 +71,13 @@
         <button onclick="calculate()">Hesapla</button>
         <div id="result" class="result"></div>
     </div>
-    
+
     <!-- Trend Sekmesi -->
     <div id="trend" class="tab-content">
         <h3>Zaman Serisi Trendi</h3>
         <div class="form-group">
             <label>Ülke:</label>
-            <select id="trend_country">
-                {% for c in countries %}
-                <option value="{{ c }}">{{ c }}</option>
-                {% endfor %}
-            </select>
+            <input type="text" id="trend_country" placeholder="Örnek: Turkey" value="Turkey">
         </div>
         <div class="form-group">
             <label>Başlangıç Yılı:</label>
@@ -99,7 +90,7 @@
         <button onclick="loadTrend()">Grafiği Göster</button>
         <div id="trend_graph" class="result"></div>
     </div>
-    
+
     <!-- Manuel Veri Girişi Sekmesi -->
     <div id="manual" class="tab-content">
         <h3>Manuel Veri Ekle / Güncelle</h3>
@@ -141,11 +132,11 @@
         <h3>Önerilen Veri Kaynakları</h3>
         <p>KES modelinde kullanılan değişkenler için aşağıdaki kamuya açık kaynaklar önerilmektedir. Verileri bu kaynaklardan derleyip yukarıdaki "Manuel Veri Girişi" ile ekleyebilirsiniz.</p>
         <ul>
-            <li><strong>Gini katsayısı (G):</strong> Dünya Bankası – <em>Poverty and Inequality Platform</em> <br>
+            <li><strong>Gini katsayısı (G):</strong> Dünya Bankası – <em>Poverty and Inequality Platform</em><br>
                 <code>http://api.worldbank.org/v2/country/TUR/indicator/SI.POV.GINI?format=json</code></li>
-            <li><strong>Otomasyon yoğunluğu (O):</strong> Our World in Data (IFR’den derlenmiş) – <em>Robot density in manufacturing</em> <br>
+            <li><strong>Otomasyon yoğunluğu (O):</strong> Our World in Data (IFR’den derlenmiş) – <em>Robot density in manufacturing</em><br>
                 <code>https://ourworldindata.org/grapher/robot-density-in-manufacturing</code></li>
-            <li><strong>Evcilleştirme kapasitesi (E):</strong> Dünya Bankası – <em>Worldwide Governance Indicators (Government Effectiveness)</em> <br>
+            <li><strong>Evcilleştirme kapasitesi (E):</strong> Dünya Bankası – <em>Worldwide Governance Indicators (Government Effectiveness)</em><br>
                 <code>http://api.worldbank.org/v2/country/TUR/indicator/GE.EST?format=json</code></li>
             <li><strong>Toplumsal bilinç (B):</strong> ILOSTAT (sendikalaşma oranı) + V-Dem (Sivil Toplum Endeksi)</li>
             <li><strong>Dış direnç (D):</strong> Kırılgan Devletler Endeksi (FSI), Ekonomik Kırılganlık Endeksi (EVI), Jeopolitik Risk Endeksi (GPR) bileşik endeksi</li>
@@ -170,10 +161,10 @@ function openTab(tabName) {
 }
 
 async function getAvailableYears() {
-    const country = document.getElementById('country').value;
+    const country = document.getElementById('country').value.trim();
     const yearListDiv = document.getElementById('year_list');
     if (!country) {
-        yearListDiv.innerHTML = '<span class="warning">Lütfen bir ülke seçin.</span>';
+        yearListDiv.innerHTML = '<span class="warning">Lütfen bir ülke adı girin.</span>';
         return;
     }
     yearListDiv.innerHTML = 'Yükleniyor...';
@@ -197,7 +188,7 @@ async function getAvailableYears() {
 }
 
 async function calculate() {
-    const country = document.getElementById('country').value;
+    const country = document.getElementById('country').value.trim();
     const year = parseInt(document.getElementById('year').value);
     const alpha = parseFloat(document.getElementById('alpha').value);
     const beta = parseFloat(document.getElementById('beta').value);
@@ -205,6 +196,11 @@ async function calculate() {
     const lambd = parseFloat(document.getElementById('lambd').value);
     const geometric = document.getElementById('geometric').checked;
     const use_min = document.getElementById('use_min').checked;
+
+    if (!country) {
+        document.getElementById('result').innerHTML = '<span class="error">Lütfen ülke adı girin.</span>';
+        return;
+    }
 
     const resultDiv = document.getElementById('result');
     resultDiv.innerHTML = 'Hesaplanıyor...';
@@ -246,10 +242,14 @@ async function calculate() {
 }
 
 async function loadTrend() {
-    const country = document.getElementById('trend_country').value;
+    const country = document.getElementById('trend_country').value.trim();
     const start_year = parseInt(document.getElementById('start_year').value);
     const end_year = parseInt(document.getElementById('end_year').value);
     const graphDiv = document.getElementById('trend_graph');
+    if (!country) {
+        graphDiv.innerHTML = '<span class="error">Lütfen ülke adı girin.</span>';
+        return;
+    }
     graphDiv.innerHTML = 'Yükleniyor...';
     try {
         const res = await fetch('/trend', {
@@ -271,7 +271,7 @@ async function loadTrend() {
 
 async function saveManual() {
     const data = {
-        country: document.getElementById('manual_country').value,
+        country: document.getElementById('manual_country').value.trim(),
         year: parseInt(document.getElementById('manual_year').value),
         gini: parseFloat(document.getElementById('manual_gini').value) || null,
         automation: parseFloat(document.getElementById('manual_automation').value) || null,
@@ -296,7 +296,7 @@ async function saveManual() {
             resultDiv.innerHTML = '<span class="error">' + result.error + '</span>';
         } else {
             resultDiv.innerHTML = '<span style="color:green;">✓ ' + result.message + '</span>';
-            const selectedCountry = document.getElementById('country').value;
+            const selectedCountry = document.getElementById('country').value.trim();
             if (selectedCountry === data.country) {
                 getAvailableYears();
             }
