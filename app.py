@@ -1,4 +1,4 @@
-from flask import Flask, render_template, request, jsonify, session
+from flask import Flask, render_template, request, jsonify
 import pandas as pd
 import plotly.express as px
 import plotly.utils
@@ -9,12 +9,11 @@ from kes_calculator import KESCalculator
 from data_fetcher import DataFetcher
 
 app = Flask(__name__)
-app.secret_key = 'your-secret-key-change-this'
 
-# Varsayılan veritabanı dosyası
+# Varsayılan veritabanı dosyası (repo kökünde olmalı)
 DATABASE_PATH = 'kes_data_unified.db'
 
-# Tablo isimleri ve görünen adları
+# Tablo isimleri ve görünen adları (frontend'e gönderilecek)
 TABLES = {
     'gini': 'Gini Katsayısı',
     'automation': 'Otomasyon',
@@ -40,19 +39,11 @@ def get_sources():
     data = request.json
     table = data.get('table')
     fetcher = DataFetcher(DATABASE_PATH)
-    sources = fetcher.get_manual_sources(table)
+    sources = fetcher.get_available_sources(table)
+    # Manuel kaynağı da ekle (kullanıcı manuel giriş yapabilir)
+    if 'manual' not in sources:
+        sources.append('manual')
     return jsonify(sources)
-
-@app.route('/get_available_years', methods=['POST'])
-def get_available_years():
-    """Bir ülke, tablo ve kaynak için mevcut yılları döndürür"""
-    data = request.json
-    country = data.get('country')
-    table = data.get('table')
-    source = data.get('source')
-    fetcher = DataFetcher(DATABASE_PATH)
-    years = fetcher.get_all_years(country, table, source)
-    return jsonify(years)
 
 @app.route('/calculate', methods=['POST'])
 def calculate():
@@ -60,14 +51,7 @@ def calculate():
         data = request.json
         country = data['country']
         year = int(data['year'])
-        # Seçilen kaynaklar
         sources = data.get('sources', {})
-        gini_source = sources.get('gini', 'worldbank')
-        automation_source = sources.get('automation', 'owid')
-        governance_source = sources.get('governance', 'wgi')
-        consciousness_source = sources.get('consciousness', 'worldbank_union')
-        resistance_source = sources.get('resistance', 'wb_political_stability')
-        # Ağırlıklar
         alpha = float(data.get('alpha', 0.5))
         beta = float(data.get('beta', 0.5))
         gamma = float(data.get('gamma', 0.5))
@@ -79,27 +63,35 @@ def calculate():
 
         def get_val(table, source):
             val = fetcher.get_value(table, country, year, source)
+            used_year = year
+            is_estimated = 0
             if val is None:
-                # En yakın yılı bulmaya çalış
+                # En yakın yılı bul
                 years = fetcher.get_all_years(country, table, source)
                 if years:
-                    nearest = min(years, key=lambda y: abs(y - year))
-                    val = fetcher.get_value(table, country, nearest, source)
-                    return val, nearest
-            return val, year
+                    used_year = min(years, key=lambda y: abs(y - year))
+                    val = fetcher.get_value(table, country, used_year, source)
+                if val is None:
+                    val = 50.0
+                    is_estimated = 1
+            else:
+                # Değer var ama is_estimated kontrolü
+                is_estimated = fetcher.get_is_estimated(table, country, used_year, source)
+            return val, used_year, is_estimated
 
-        gini, gini_year = get_val('gini', gini_source)
-        automation, auto_year = get_val('automation', automation_source)
-        governance, gov_year = get_val('governance', governance_source)
-        consciousness, con_year = get_val('consciousness', consciousness_source)
-        resistance, res_year = get_val('resistance', resistance_source)
+        gini, gini_year, gini_est = get_val('gini', sources.get('gini', 'worldbank'))
+        automation, auto_year, auto_est = get_val('automation', sources.get('automation', 'owid'))
+        governance, gov_year, gov_est = get_val('governance', sources.get('governance', 'wgi'))
+        consciousness, con_year, con_est = get_val('consciousness', sources.get('consciousness', 'worldbank_union'))
+        resistance, res_year, res_est = get_val('resistance', sources.get('resistance', 'wb_political_stability'))
 
-        # Eksik değerleri 50 ile doldur
-        gini = gini if gini is not None else 50.0
-        automation = automation if automation is not None else 50.0
-        governance = governance if governance is not None else 50.0
-        consciousness = consciousness if consciousness is not None else 50.0
-        resistance = resistance if resistance is not None else 50.0
+        estimated = {
+            'gini': gini_est,
+            'automation': auto_est,
+            'governance': gov_est,
+            'consciousness': con_est,
+            'resistance': res_est
+        }
 
         calc = KESCalculator(alpha, beta, gamma, lambd, geometric, use_min)
         v_ic = calc.calculate_v_ic(gini, automation, governance, consciousness)
@@ -116,7 +108,8 @@ def calculate():
                 'governance': gov_year,
                 'consciousness': con_year,
                 'resistance': res_year
-            }
+            },
+            'estimated': estimated
         })
     except Exception as e:
         return jsonify({'status': 'error', 'message': str(e), 'traceback': traceback.format_exc()}), 500
@@ -128,13 +121,11 @@ def trend():
         country = data['country']
         start_year = int(data.get('start_year', 2000))
         end_year = int(data.get('end_year', 2024))
-        # Trend için varsayılan kaynakları kullan (ilk mevcut kaynak)
         fetcher = DataFetcher(DATABASE_PATH)
-        # resistance tablosundaki ilk kaynağı al
-        sources = fetcher.get_manual_sources('resistance')
+        # Trend için varsayılan kaynakları kullan
+        sources = fetcher.get_available_sources('resistance')
         default_source = sources[0] if sources else 'wb_political_stability'
 
-        # Yıllara göre KES hesapla
         results = []
         for year in range(start_year, end_year + 1):
             gini = fetcher.get_value('gini', country, year, 'worldbank')
@@ -164,17 +155,20 @@ def trend():
 
 @app.route('/manual_data', methods=['POST'])
 def manual_data():
-    data = request.json
-    country = data['country']
-    year = int(data['year'])
-    katsayi_turu = data['katsayi_turu']  # 'gini', 'automation', etc.
-    value = float(data['value'])
-    fetcher = DataFetcher(DATABASE_PATH)
-    success = fetcher.save_manual_record(country, year, katsayi_turu, value)
-    if success:
-        return jsonify({'status': 'success', 'message': f'{country} {year} için {katsayi_turu} kaydedildi.'})
-    else:
-        return jsonify({'status': 'error', 'message': 'Kayıt başarısız'}), 500
+    try:
+        data = request.json
+        country = data['country']
+        year = int(data['year'])
+        katsayi_turu = data['katsayi_turu']
+        value = float(data['value'])
+        fetcher = DataFetcher(DATABASE_PATH)
+        success = fetcher.save_manual_record(country, year, katsayi_turu, value)
+        if success:
+            return jsonify({'status': 'success', 'message': f'{country} {year} için {katsayi_turu} kaydedildi.'})
+        else:
+            return jsonify({'status': 'error', 'message': 'Kayıt başarısız'}), 500
+    except Exception as e:
+        return jsonify({'status': 'error', 'message': str(e)}), 500
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000, debug=False)
