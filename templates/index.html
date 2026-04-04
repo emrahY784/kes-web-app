@@ -4,103 +4,178 @@
     <meta charset="UTF-8">
     <title>KES - Kutup Eğilim Skoru</title>
     <style>
-        body { font-family: Arial; margin: 20px; background: #f4f4f9; }
+        body { font-family: Arial, sans-serif; margin: 20px; background: #f4f4f9; }
         .container { max-width: 1000px; margin: auto; background: white; padding: 20px; border-radius: 8px; }
-        .tab-button { background: #ddd; padding: 10px 20px; cursor: pointer; border: none; }
+        .tab-button { background: #ddd; padding: 10px 20px; cursor: pointer; border: none; margin-right: 5px; }
         .tab-button.active { background: #3498db; color: white; }
-        .tab-content { display: none; padding: 20px; }
+        .tab-content { display: none; padding: 20px; border: 1px solid #ddd; margin-top: 10px; border-radius: 5px; }
         .tab-content.active { display: block; }
         input, select, button { margin: 5px; padding: 8px; }
         .result { background: #ecf0f1; padding: 15px; margin-top: 20px; border-radius: 5px; }
         .year-list { background: #e8f4f8; margin-top: 10px; padding: 8px; border-radius: 4px; font-size: 0.9em; }
+        .warning { color: #e67e22; }
+        .error { color: #e74c3c; }
+        label { display: inline-block; width: 180px; margin-bottom: 8px; }
+        .form-group { margin-bottom: 12px; }
+        hr { margin: 20px 0; }
     </style>
     <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
 </head>
 <body>
 <div class="container">
     <h1>📊 Kutup Eğilim Skoru (KES)</h1>
+    <p>Ülkelerin sermayeci veya kamucu kutba eğilimini hesaplar (0-100).</p>
+    
     <div>
         <button class="tab-button active" onclick="openTab('calculate')">Hesapla</button>
         <button class="tab-button" onclick="openTab('trend')">Trend</button>
         <button class="tab-button" onclick="openTab('manual')">Manuel Veri Girişi</button>
-        <button class="tab-button" onclick="openTab('api')">API'den Çek</button>
+        <button class="tab-button" onclick="openTab('info')">Veri Kaynakları</button>
     </div>
 
+    <!-- Hesaplama Sekmesi -->
     <div id="calculate" class="tab-content active">
-        <h3>Hesapla</h3>
-        <label>Ülke: 
-            <select id="country" onchange="getAvailableYears()">
+        <h3>Kutup Eğilim Skoru Hesapla</h3>
+        <div class="form-group">
+            <label>Ülke:</label>
+            <select id="country">
                 {% for c in countries %}
-                <option value="{{ c.name }}">{{ c.name }}</option>
+                <option value="{{ c }}">{{ c }}</option>
                 {% endfor %}
             </select>
-        </label>
-        <label>Yıl: <input type="number" id="year" value="2023"></label>
-        <button type="button" onclick="getAvailableYears()">Mevcut Yılları Göster</button>
+        </div>
+        <div class="form-group">
+            <label>Yıl:</label>
+            <input type="number" id="year" value="2023">
+            <button type="button" onclick="getAvailableYears()" style="margin-left:10px;">Mevcut Yılları Göster</button>
+        </div>
         <div id="year_list" class="year-list"></div>
         
-        <label>α (Gini): <input type="number" id="alpha" step="0.05" value="0.5"></label>
-        <label>β (Otomasyon): <input type="number" id="beta" step="0.05" value="0.5"></label>
-        <label>γ (Evcilleştirme): <input type="number" id="gamma" step="0.05" value="0.5"></label>
-        <label>λ (Bilinç): <input type="number" id="lambd" step="0.05" value="0.5"></label>
-        <label><input type="checkbox" id="geometric"> Geometrik formül</label>
-        <label><input type="checkbox" id="use_min"> Min formülü</label>
+        <div class="form-group">
+            <label>α (Gini ağırlığı):</label>
+            <input type="number" id="alpha" step="0.05" value="0.5">
+        </div>
+        <div class="form-group">
+            <label>β (Otomasyon ağırlığı):</label>
+            <input type="number" id="beta" step="0.05" value="0.5">
+        </div>
+        <div class="form-group">
+            <label>γ (Evcilleştirme ağırlığı):</label>
+            <input type="number" id="gamma" step="0.05" value="0.5">
+        </div>
+        <div class="form-group">
+            <label>λ (Bilinç ağırlığı):</label>
+            <input type="number" id="lambd" step="0.05" value="0.5">
+        </div>
+        <div class="form-group">
+            <label><input type="checkbox" id="geometric"> Geometrik formül (K = V_iç * √(V_dış)/10)</label>
+        </div>
+        <div class="form-group">
+            <label><input type="checkbox" id="use_min"> Min formülü (K = min(V_iç, V_dış))</label>
+        </div>
         <button onclick="calculate()">Hesapla</button>
         <div id="result" class="result"></div>
     </div>
-
+    
+    <!-- Trend Sekmesi -->
     <div id="trend" class="tab-content">
-        <h3>Trend</h3>
-        <label>Ülke: <select id="trend_country">
-            {% for c in countries %}
-            <option value="{{ c.name }}">{{ c.name }}</option>
-            {% endfor %}
-        </select></label>
-        <label>Başlangıç Yılı: <input type="number" id="start_year" value="2000"></label>
-        <label>Bitiş Yılı: <input type="number" id="end_year" value="2024"></label>
+        <h3>Zaman Serisi Trendi</h3>
+        <div class="form-group">
+            <label>Ülke:</label>
+            <select id="trend_country">
+                {% for c in countries %}
+                <option value="{{ c }}">{{ c }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="form-group">
+            <label>Başlangıç Yılı:</label>
+            <input type="number" id="start_year" value="2000">
+        </div>
+        <div class="form-group">
+            <label>Bitiş Yılı:</label>
+            <input type="number" id="end_year" value="2024">
+        </div>
         <button onclick="loadTrend()">Grafiği Göster</button>
-        <div id="trend_graph"></div>
+        <div id="trend_graph" class="result"></div>
     </div>
-
+    
+    <!-- Manuel Veri Girişi Sekmesi -->
     <div id="manual" class="tab-content">
-        <h3>Manuel Veri Girişi</h3>
-        <label>Ülke: <input type="text" id="manual_country" placeholder="Turkey"></label>
-        <label>Yıl: <input type="number" id="manual_year" placeholder="2023"></label>
-        <label>Gini (0-100): <input type="number" id="manual_gini" step="0.1"></label>
-        <label>Otomasyon (0-100): <input type="number" id="manual_automation" step="0.1"></label>
-        <label>Evcilleştirme (0-100): <input type="number" id="manual_evcillestirme" step="0.1"></label>
-        <label>Bilinç (0-100): <input type="number" id="manual_bilinc" step="0.1"></label>
-        <label>Dış Direnç (0-100): <input type="number" id="manual_dis_direnc" step="0.1"></label>
+        <h3>Manuel Veri Ekle / Güncelle</h3>
+        <p>Verilerinizi 0-100 aralığında girin. Eksik bırakırsanız hesaplamada 50 (nötr) kullanılır.</p>
+        <div class="form-group">
+            <label>Ülke Adı:</label>
+            <input type="text" id="manual_country" placeholder="Turkey">
+        </div>
+        <div class="form-group">
+            <label>Yıl:</label>
+            <input type="number" id="manual_year" placeholder="2023">
+        </div>
+        <div class="form-group">
+            <label>Gini (0-100):</label>
+            <input type="number" id="manual_gini" step="0.1">
+        </div>
+        <div class="form-group">
+            <label>Otomasyon (0-100):</label>
+            <input type="number" id="manual_automation" step="0.1">
+        </div>
+        <div class="form-group">
+            <label>Evcilleştirme (0-100):</label>
+            <input type="number" id="manual_evcillestirme" step="0.1">
+        </div>
+        <div class="form-group">
+            <label>Bilinç (0-100):</label>
+            <input type="number" id="manual_bilinc" step="0.1">
+        </div>
+        <div class="form-group">
+            <label>Dış Direnç (0-100):</label>
+            <input type="number" id="manual_dis_direnc" step="0.1">
+        </div>
         <button onclick="saveManual()">Kaydet</button>
         <div id="manual_result" class="result"></div>
     </div>
 
-    <div id="api" class="tab-content">
-        <h3>API'den Otomatik Veri Çek</h3>
-        <label>Ülke Adı: 
-            <select id="api_country">
-                {% for c in countries %}
-                <option value="{{ c.name }}">{{ c.name }}</option>
-                {% endfor %}
-            </select>
-        </label>
-        <button onclick="fetchFromAPI()">Dünya Bankası'ndan Gini ve Yönetişim Verilerini Çek</button>
-        <div id="api_result" class="result"></div>
+    <!-- Veri Kaynakları Bilgi Sekmesi -->
+    <div id="info" class="tab-content">
+        <h3>Önerilen Veri Kaynakları</h3>
+        <p>KES modelinde kullanılan değişkenler için aşağıdaki kamuya açık kaynaklar önerilmektedir. Verileri bu kaynaklardan derleyip yukarıdaki "Manuel Veri Girişi" ile ekleyebilirsiniz.</p>
+        <ul>
+            <li><strong>Gini katsayısı (G):</strong> Dünya Bankası – <em>Poverty and Inequality Platform</em> <br>
+                <code>http://api.worldbank.org/v2/country/TUR/indicator/SI.POV.GINI?format=json</code></li>
+            <li><strong>Otomasyon yoğunluğu (O):</strong> Our World in Data (IFR’den derlenmiş) – <em>Robot density in manufacturing</em> <br>
+                <code>https://ourworldindata.org/grapher/robot-density-in-manufacturing</code></li>
+            <li><strong>Evcilleştirme kapasitesi (E):</strong> Dünya Bankası – <em>Worldwide Governance Indicators (Government Effectiveness)</em> <br>
+                <code>http://api.worldbank.org/v2/country/TUR/indicator/GE.EST?format=json</code></li>
+            <li><strong>Toplumsal bilinç (B):</strong> ILOSTAT (sendikalaşma oranı) + V-Dem (Sivil Toplum Endeksi)</li>
+            <li><strong>Dış direnç (D):</strong> Kırılgan Devletler Endeksi (FSI), Ekonomik Kırılganlık Endeksi (EVI), Jeopolitik Risk Endeksi (GPR) bileşik endeksi</li>
+        </ul>
+        <p><strong>Not:</strong> Tüm veriler manuel olarak girilmelidir. Uygulama otomatik veri çekmez. Bu sayede hangi kaynaktan hangi değerin kullanıldığı tamamen şeffaftır.</p>
     </div>
 </div>
 
 <script>
 function openTab(tabName) {
-    document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
-    document.querySelectorAll('.tab-button').forEach(b => b.classList.remove('active'));
-    document.getElementById(tabName).classList.add('active');
-    event.currentTarget.classList.add('active');
+    var i, tabcontent, tabbuttons;
+    tabcontent = document.getElementsByClassName("tab-content");
+    for (i = 0; i < tabcontent.length; i++) {
+        tabcontent[i].classList.remove("active");
+    }
+    tabbuttons = document.getElementsByClassName("tab-button");
+    for (i = 0; i < tabbuttons.length; i++) {
+        tabbuttons[i].classList.remove("active");
+    }
+    document.getElementById(tabName).classList.add("active");
+    event.currentTarget.classList.add("active");
 }
 
 async function getAvailableYears() {
     const country = document.getElementById('country').value;
     const yearListDiv = document.getElementById('year_list');
-    if (!country) return;
+    if (!country) {
+        yearListDiv.innerHTML = '<span class="warning">Lütfen bir ülke seçin.</span>';
+        return;
+    }
     yearListDiv.innerHTML = 'Yükleniyor...';
     try {
         const res = await fetch('/available_years', {
@@ -110,14 +185,14 @@ async function getAvailableYears() {
         });
         const data = await res.json();
         if (data.error) {
-            yearListDiv.innerHTML = '⚠️ ' + data.error;
+            yearListDiv.innerHTML = '<span class="error">' + data.error + '</span>';
         } else if (data.years && data.years.length > 0) {
             yearListDiv.innerHTML = '<strong>Mevcut yıllar:</strong> ' + data.years.join(', ');
         } else {
-            yearListDiv.innerHTML = '⚠️ Bu ülke için henüz veri yok. Lütfen "API\'den Çek" veya "Manuel Veri Girişi" yapın.';
+            yearListDiv.innerHTML = '<span class="warning">Bu ülke için henüz veri yok. Lütfen "Manuel Veri Girişi" sekmesinden ekleyin.</span>';
         }
     } catch (err) {
-        yearListDiv.innerHTML = '⚠️ Sunucu hatası: ' + err.message;
+        yearListDiv.innerHTML = '<span class="error">Sunucu hatası: ' + err.message + '</span>';
     }
 }
 
@@ -139,30 +214,34 @@ async function calculate() {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ country, year, alpha, beta, gamma, lambd, geometric, use_min })
         });
-        const text = await res.text();
-        let result;
-        try {
-            result = JSON.parse(text);
-        } catch(e) {
-            resultDiv.innerHTML = `<p style="color:red">Sunucu yanıtı JSON değil. İlk 200 karakter: ${text.substring(0,200)}</p>`;
-            return;
-        }
+        const result = await res.json();
         if (result.error) {
-            resultDiv.innerHTML = `<p style="color:red">${result.error}</p><pre>${result.traceback || ''}</pre>`;
+            resultDiv.innerHTML = '<span class="error">Hata: ' + result.error + '</span>';
+            if (result.traceback) console.error(result.traceback);
         } else {
+            let warningHtml = '';
+            if (result.warnings && result.warnings.length > 0) {
+                warningHtml = '<div class="warning"><strong>Uyarılar:</strong><ul>';
+                for (let w of result.warnings) {
+                    warningHtml += '<li>' + w + '</li>';
+                }
+                warningHtml += '</ul></div>';
+            }
             let yearMsg = '';
             if (result.used_year !== result.requested_year) {
-                yearMsg = `<p><em>⚠️ İstenen yıl (${result.requested_year}) için veri yoktu. En yakın yıl (${result.used_year}) kullanıldı.</em></p>`;
+                yearMsg = `<div class="warning">⚠️ İstenen yıl (${result.requested_year}) için veri yoktu. En yakın yıl (${result.used_year}) kullanıldı.</div>`;
             }
             resultDiv.innerHTML = `
                 ${yearMsg}
+                ${warningHtml}
+                <h3>Sonuç: ${result.country} (${result.used_year})</h3>
                 <p><strong>KES:</strong> ${result.kes} (${result.interpretation})</p>
                 <p><strong>V_iç Skoru:</strong> ${result.v_ic_score}</p>
                 <p><em>Yorum: 0-33 Sermayeci, 34-66 Karma, 67-100 Kamucu</em></p>
             `;
         }
     } catch (err) {
-        resultDiv.innerHTML = `<p style="color:red">Ağ hatası: ${err.message}</p>`;
+        resultDiv.innerHTML = '<span class="error">Ağ hatası: ' + err.message + '</span>';
     }
 }
 
@@ -180,13 +259,13 @@ async function loadTrend() {
         });
         const result = await res.json();
         if (result.error) {
-            graphDiv.innerHTML = `<p style="color:red">${result.error}</p>`;
+            graphDiv.innerHTML = '<span class="error">' + result.error + '</span>';
         } else {
             const graph = JSON.parse(result.graph);
             Plotly.newPlot('trend_graph', graph.data, graph.layout);
         }
     } catch (err) {
-        graphDiv.innerHTML = `<p style="color:red">Hata: ${err.message}</p>`;
+        graphDiv.innerHTML = '<span class="error">Hata: ' + err.message + '</span>';
     }
 }
 
@@ -194,12 +273,16 @@ async function saveManual() {
     const data = {
         country: document.getElementById('manual_country').value,
         year: parseInt(document.getElementById('manual_year').value),
-        gini: parseFloat(document.getElementById('manual_gini').value),
-        automation: parseFloat(document.getElementById('manual_automation').value),
-        evcillestirme: parseFloat(document.getElementById('manual_evcillestirme').value),
-        bilinc: parseFloat(document.getElementById('manual_bilinc').value),
-        dis_direnc: parseFloat(document.getElementById('manual_dis_direnc').value)
+        gini: parseFloat(document.getElementById('manual_gini').value) || null,
+        automation: parseFloat(document.getElementById('manual_automation').value) || null,
+        evcillestirme: parseFloat(document.getElementById('manual_evcillestirme').value) || null,
+        bilinc: parseFloat(document.getElementById('manual_bilinc').value) || null,
+        dis_direnc: parseFloat(document.getElementById('manual_dis_direnc').value) || null
     };
+    if (!data.country || isNaN(data.year)) {
+        document.getElementById('manual_result').innerHTML = '<span class="error">Lütfen ülke ve yıl girin.</span>';
+        return;
+    }
     const resultDiv = document.getElementById('manual_result');
     resultDiv.innerHTML = 'Kaydediliyor...';
     try {
@@ -210,39 +293,22 @@ async function saveManual() {
         });
         const result = await res.json();
         if (result.error) {
-            resultDiv.innerHTML = `<p style="color:red">${result.error}</p>`;
+            resultDiv.innerHTML = '<span class="error">' + result.error + '</span>';
         } else {
-            resultDiv.innerHTML = `<p style="color:green">${result.message}</p>`;
-            if (document.getElementById('country').value === data.country) getAvailableYears();
+            resultDiv.innerHTML = '<span style="color:green;">✓ ' + result.message + '</span>';
+            const selectedCountry = document.getElementById('country').value;
+            if (selectedCountry === data.country) {
+                getAvailableYears();
+            }
         }
     } catch (err) {
-        resultDiv.innerHTML = `<p style="color:red">Hata: ${err.message}</p>`;
+        resultDiv.innerHTML = '<span class="error">Hata: ' + err.message + '</span>';
     }
 }
 
-async function fetchFromAPI() {
-    const name = document.getElementById('api_country').value;
-    const resultDiv = document.getElementById('api_result');
-    resultDiv.innerHTML = 'Veri çekiliyor...';
-    try {
-        const res = await fetch('/fetch_from_api', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ name: name })
-        });
-        const result = await res.json();
-        if (result.error) {
-            resultDiv.innerHTML = `<p style="color:red">${result.error}</p><pre>${result.traceback || ''}</pre>`;
-        } else {
-            resultDiv.innerHTML = `<p style="color:green">${result.message}</p>`;
-            if (document.getElementById('country').value === name) getAvailableYears();
-        }
-    } catch (err) {
-        resultDiv.innerHTML = `<p style="color:red">Hata: ${err.message}</p>`;
-    }
-}
-
-window.onload = getAvailableYears;
+window.onload = function() {
+    getAvailableYears();
+};
 </script>
 </body>
 </html>
