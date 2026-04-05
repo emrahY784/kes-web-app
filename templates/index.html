@@ -10,9 +10,11 @@
         .tab-button.active { background: #3498db; color: white; }
         .tab-content { display: none; padding: 20px; border: 1px solid #ddd; margin-top: 10px; border-radius: 5px; }
         .tab-content.active { display: block; }
-        .form-group { margin-bottom: 15px; }
+        .form-group { margin-bottom: 15px; display: flex; align-items: center; flex-wrap: wrap; }
         label { display: inline-block; width: 220px; font-weight: bold; }
-        select, input { padding: 5px; width: 260px; }
+        select, input { padding: 5px; width: 260px; margin-right: 10px; }
+        .source-value { font-size: 0.9em; color: #2c3e50; background: #ecf0f1; padding: 4px 8px; border-radius: 4px; }
+        .formula-group { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; margin-top: 15px; }
         button { padding: 8px 15px; background: #3498db; color: white; border: none; cursor: pointer; margin-top: 10px; border-radius: 4px; }
         .result { background: #ecf0f1; padding: 15px; margin-top: 20px; border-radius: 5px; }
         .warning { color: #e67e22; }
@@ -42,27 +44,22 @@
             <input type="number" id="year" value="2020">
         </div>
         <div id="sources-container"></div>
-        <div class="form-group">
-            <label>α (Gini ağırlığı):</label>
-            <input type="number" id="alpha" step="0.05" value="0.5">
-        </div>
-        <div class="form-group">
-            <label>β (Otomasyon ağırlığı):</label>
-            <input type="number" id="beta" step="0.05" value="0.5">
-        </div>
-        <div class="form-group">
-            <label>γ (Evcilleştirme ağırlığı):</label>
-            <input type="number" id="gamma" step="0.05" value="0.5">
-        </div>
-        <div class="form-group">
-            <label>λ (Bilinç ağırlığı):</label>
-            <input type="number" id="lambd" step="0.05" value="0.5">
-        </div>
-        <div class="form-group">
-            <label><input type="checkbox" id="geometric"> Geometrik formül</label>
-        </div>
-        <div class="form-group">
-            <label><input type="checkbox" id="use_min"> Min formülü</label>
+
+        <div class="formula-group">
+            <div>
+                <label>α (Gini):</label>
+                <input type="number" id="alpha" step="0.05" value="0.5" style="width:80px;">
+                <label>β (Otomasyon):</label>
+                <input type="number" id="beta" step="0.05" value="0.5" style="width:80px;">
+                <label>γ (Evcilleştirme):</label>
+                <input type="number" id="gamma" step="0.05" value="0.5" style="width:80px;">
+                <label>λ (Bilinç):</label>
+                <input type="number" id="lambd" step="0.05" value="0.5" style="width:80px;">
+            </div>
+            <div>
+                <label><input type="checkbox" id="geometric"> Geometrik formül</label>
+                <label><input type="checkbox" id="use_min"> Min formülü</label>
+            </div>
         </div>
         <button onclick="calculateKES()">Hesapla</button>
         <div id="result" class="result"></div>
@@ -144,6 +141,8 @@ async function loadCountries() {
             select.appendChild(option);
         });
     });
+    // İlk ülke seçiliyken kaynak değerlerini yükle
+    if (countries.length) updateAllSourceValues();
 }
 
 async function loadSourceOptions() {
@@ -158,13 +157,38 @@ async function loadSourceOptions() {
         const sources = await res.json();
         const div = document.createElement('div');
         div.className = 'form-group';
+        div.id = `source-group-${table}`;
         div.innerHTML = `
             <label>${label} Kaynağı:</label>
-            <select id="source_${table}">
+            <select id="source_${table}" onchange="updateSourceValue('${table}')">
                 ${sources.map(s => `<option value="${s}">${s}</option>`).join('')}
             </select>
+            <span id="value_${table}" class="source-value">Değer: --</span>
         `;
         container.appendChild(div);
+    }
+    // Kaynak seçimleri yüklendikten sonra değerleri getir
+    updateAllSourceValues();
+}
+
+async function updateSourceValue(table) {
+    const source = document.getElementById(`source_${table}`).value;
+    const country = document.getElementById('country').value;
+    const year = document.getElementById('year').value;
+    if (!country) return;
+    const res = await fetch('/get_value', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ table, country, year, source })
+    });
+    const data = await res.json();
+    const val = data.value !== undefined ? data.value : '?';
+    document.getElementById(`value_${table}`).innerHTML = `Değer: ${val}`;
+}
+
+async function updateAllSourceValues() {
+    for (const table of Object.keys(tables)) {
+        await updateSourceValue(table);
     }
 }
 
@@ -179,7 +203,7 @@ async function calculateKES() {
     const use_min = document.getElementById('use_min').checked;
 
     const sources = {};
-    for (const [table, _] of Object.entries(tables)) {
+    for (const table of Object.keys(tables)) {
         sources[table] = document.getElementById(`source_${table}`).value;
     }
 
@@ -219,6 +243,7 @@ async function calculateKES() {
                 ${estimatedMsg}
                 <p><strong>KES:</strong> ${data.kes} (${data.interpretation})</p>
                 <p><strong>V_iç Skoru:</strong> ${data.v_ic}</p>
+                <p><strong>V_dış Skoru (Dış Direnç):</strong> ${data.v_dis}</p>
                 <p><em>Yorum: 0-33 Sermayeci, 34-66 Karma, 67-100 Kamucu</em></p>
             `;
         }
@@ -269,11 +294,16 @@ async function saveManual() {
     const manualResult = document.getElementById('manual_result');
     if (result.status === 'success') {
         manualResult.innerHTML = `<span style="color:green">${result.message}</span>`;
-        loadSourceOptions();
+        // Kaynak listesini yenile ve değerleri güncelle
+        await loadSourceOptions();
     } else {
         manualResult.innerHTML = `<span class="warning">${result.message}</span>`;
     }
 }
+
+// Ülke veya yıl değişince değerleri güncelle
+document.getElementById('country').addEventListener('change', updateAllSourceValues);
+document.getElementById('year').addEventListener('input', updateAllSourceValues);
 </script>
 </body>
 </html>
