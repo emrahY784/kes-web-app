@@ -4,14 +4,15 @@ import plotly.express as px
 import plotly.utils
 import json
 import traceback
-import os
 from kes_calculator import KESCalculator
 from data_fetcher import DataFetcher
 
 app = Flask(__name__)
 
+# Varsayılan veritabanı dosyası (yeni yapıdaki final dosya)
 DATABASE_PATH = 'final_kes_data.db'
 
+# Tablo isimleri ve görünen adları (frontend'e gönderilecek)
 TABLES = {
     'gini_values': 'Gini Katsayısı',
     'automation_values': 'Otomasyon',
@@ -26,16 +27,19 @@ def index():
 
 @app.route('/get_countries')
 def get_countries():
+    """Tüm ülkelerin listesini döndürür (gini_values tablosundan)"""
     fetcher = DataFetcher(DATABASE_PATH)
     countries = fetcher.get_country_list('gini_values')
     return jsonify(countries)
 
 @app.route('/get_sources', methods=['POST'])
 def get_sources():
+    """Bir tablo için mevcut kaynakları döndürür"""
     data = request.json
     table = data.get('table')
     fetcher = DataFetcher(DATABASE_PATH)
     sources = fetcher.get_available_sources(table)
+    # Manuel kaynağı da ekle (kullanıcı manuel giriş yapabilir)
     if 'manual' not in sources:
         sources.append('manual')
     return jsonify(sources)
@@ -61,6 +65,7 @@ def calculate():
             used_year = year
             is_estimated = 0
             if val is None:
+                # En yakın yılı bul
                 years = fetcher.get_all_years(country, table, source)
                 if years:
                     used_year = min(years, key=lambda y: abs(y - year))
@@ -69,15 +74,15 @@ def calculate():
                     val = 50.0
                     is_estimated = 1
             else:
+                # Değer var ama is_estimated kontrolü
                 is_estimated = fetcher.get_is_estimated(table, country, used_year, source)
-            # int64'ü int'e dönüştür
-            return float(val), int(used_year), int(is_estimated)
+            return val, used_year, is_estimated
 
-        gini, gini_year, gini_est = get_val('gini_values', sources.get('gini_values', 'swiid'))
+        gini, gini_year, gini_est = get_val('gini_values', sources.get('gini_values', 'worldbank'))
         automation, auto_year, auto_est = get_val('automation_values', sources.get('automation_values', 'owid'))
         governance, gov_year, gov_est = get_val('governance_values', sources.get('governance_values', 'wgi'))
-        consciousness, con_year, con_est = get_val('consciousness_values', sources.get('consciousness_values', 'vdem'))
-        resistance, res_year, res_est = get_val('resistance_values', sources.get('resistance_values', 'fsi'))
+        consciousness, con_year, con_est = get_val('consciousness_values', sources.get('consciousness_values', 'worldbank_union'))
+        resistance, res_year, res_est = get_val('resistance_values', sources.get('resistance_values', 'wb_political_stability'))
 
         estimated = {
             'gini': gini_est,
@@ -116,33 +121,32 @@ def trend():
         start_year = int(data.get('start_year', 2000))
         end_year = int(data.get('end_year', 2024))
         fetcher = DataFetcher(DATABASE_PATH)
-        
-        # Trend için varsayılan kaynakları kullan (mevcut en iyi)
+        # Trend için varsayılan kaynakları kullan (ilk mevcut kaynak)
+        sources = fetcher.get_available_sources('resistance_values')
+        default_source = sources[0] if sources else 'wb_political_stability'
+
         results = []
         for year in range(start_year, end_year + 1):
-            gini = fetcher.get_value('gini_values', country, year, 'swiid')
+            gini = fetcher.get_value('gini_values', country, year, 'worldbank')
             auto = fetcher.get_value('automation_values', country, year, 'owid')
             gov = fetcher.get_value('governance_values', country, year, 'wgi')
-            con = fetcher.get_value('consciousness_values', country, year, 'vdem')
-            res = fetcher.get_value('resistance_values', country, year, 'fsi')
+            con = fetcher.get_value('consciousness_values', country, year, 'worldbank_union')
+            res = fetcher.get_value('resistance_values', country, year, default_source)
             if None in [gini, auto, gov, con, res]:
                 continue
             calc = KESCalculator()
-            v_ic = calc.calculate_v_ic(float(gini), float(auto), float(gov), float(con))
-            kes = calc.calculate_kes(v_ic, float(res))
-            results.append({'year': int(year), 'kes': round(float(kes), 2)})
+            v_ic = calc.calculate_v_ic(gini, auto, gov, con)
+            kes = calc.calculate_kes(v_ic, res)
+            results.append({'year': year, 'kes': kes})
 
-        if len(results) < 2:
-            return jsonify({'error': 'Trend için yeterli veri yok (en az 2 yıl gerekli)'}), 404
+        if not results:
+            return jsonify({'error': 'Trend için yeterli veri yok'}), 404
 
         df = pd.DataFrame(results)
-        # year sütununu int yap
-        df['year'] = df['year'].astype(int)
         fig = px.line(df, x='year', y='kes', title=f'{country} - KES Trendi',
                       markers=True, labels={'kes': 'KES', 'year': 'Yıl'})
         fig.add_hline(y=50, line_dash="dash", line_color="red")
         fig.update_layout(yaxis_range=[0,100])
-        # Plotly figürünü JSON'a dönüştür
         graph_json = json.dumps(fig, cls=plotly.utils.PlotlyJSONEncoder)
         return jsonify({'graph': graph_json})
     except Exception as e:
