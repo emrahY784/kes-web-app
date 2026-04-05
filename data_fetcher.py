@@ -2,7 +2,7 @@ import sqlite3
 import pandas as pd
 
 class DataFetcher:
-    def __init__(self, db_path='kes_data_unified.db'):
+    def __init__(self, db_path='final_kes_data.db'):
         self.db_path = db_path
 
     def get_available_sources(self, table_name):
@@ -56,18 +56,17 @@ class DataFetcher:
 
     def save_manual_record(self, country, year, katsayi_turu, value, source='manual'):
         table_map = {
-            'gini': 'gini',
-            'automation': 'automation',
-            'governance': 'governance',
-            'consciousness': 'consciousness',
-            'resistance': 'resistance'
+            'gini_values': 'gini_values',
+            'automation_values': 'automation_values',
+            'governance_values': 'governance_values',
+            'consciousness_values': 'consciousness_values',
+            'resistance_values': 'resistance_values'
         }
         table = table_map.get(katsayi_turu)
         if not table:
             return False
         conn = sqlite3.connect(self.db_path)
         cursor = conn.cursor()
-        # Önce aynı kayıt var mı kontrol et, varsa güncelle
         cursor.execute(f"""
             SELECT 1 FROM {table}
             WHERE country = ? AND year = ? AND source = ?
