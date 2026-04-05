@@ -118,9 +118,10 @@ def trend():
         country = data['country']
         start_year = int(data.get('start_year', 2000))
         end_year = int(data.get('end_year', 2024))
+        resistance_source = data.get('resistance_source', None)  # Yeni parametre
         fetcher = DataFetcher(DATABASE_PATH)
 
-        # Her tablo için mevcut ilk kaynağı bul
+        # Diğer tablolar için mevcut ilk kaynağı bul
         sources_gini = fetcher.get_available_sources('gini_values')
         sources_auto = fetcher.get_available_sources('automation_values')
         sources_gov = fetcher.get_available_sources('governance_values')
@@ -134,7 +135,12 @@ def trend():
         source_auto = sources_auto[0]
         source_gov = sources_gov[0]
         source_con = sources_con[0]
-        source_res = sources_res[0]
+        
+        # Eğer resistance_source belirtilmişse onu kullan, yoksa ilk kaynağı kullan
+        if resistance_source and resistance_source in sources_res:
+            source_res = resistance_source
+        else:
+            source_res = sources_res[0]
 
         results = []
         for year in range(start_year, end_year + 1):
@@ -154,7 +160,7 @@ def trend():
             return jsonify({'error': f'{country} için {start_year}-{end_year} aralığında trend verisi yok.'}), 404
 
         df = pd.DataFrame(results)
-        fig = px.line(df, x='year', y='kes', title=f'{country} - KES Trendi',
+        fig = px.line(df, x='year', y='kes', title=f'{country} - KES Trendi (Dış Direnç: {source_res})',
                       markers=True, labels={'kes': 'KES', 'year': 'Yıl'})
         fig.add_hline(y=50, line_dash="dash", line_color="red")
         fig.update_layout(yaxis_range=[0,100])
