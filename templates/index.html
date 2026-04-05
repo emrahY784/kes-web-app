@@ -17,9 +17,6 @@
         .result { background: #ecf0f1; padding: 15px; margin-top: 20px; border-radius: 5px; }
         .warning { color: #e67e22; }
         .estimated { background-color: #fff3e0; border-left: 4px solid #e67e22; padding: 8px; margin: 10px 0; }
-        table { border-collapse: collapse; width: 100%; margin-top: 20px; }
-        th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
-        th { background-color: #f2f2f2; }
     </style>
     <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
 </head>
@@ -34,7 +31,6 @@
         <button class="tab-button" onclick="openTab('manual')">Manuel Veri Girişi</button>
     </div>
 
-    <!-- Hesaplama Sekmesi -->
     <div id="calculate" class="tab-content active">
         <h3>KES Hesapla</h3>
         <div class="form-group">
@@ -45,9 +41,7 @@
             <label>Yıl:</label>
             <input type="number" id="year" value="2020">
         </div>
-        <div id="sources-container">
-            <!-- Kaynak seçimleri dinamik olarak doldurulacak -->
-        </div>
+        <div id="sources-container"></div>
         <div class="form-group">
             <label>α (Gini ağırlığı):</label>
             <input type="number" id="alpha" step="0.05" value="0.5">
@@ -74,7 +68,6 @@
         <div id="result" class="result"></div>
     </div>
 
-    <!-- Trend Sekmesi -->
     <div id="trend" class="tab-content">
         <h3>Zaman Serisi Trendi</h3>
         <div class="form-group">
@@ -93,7 +86,6 @@
         <div id="trend_graph"></div>
     </div>
 
-    <!-- Manuel Veri Girişi Sekmesi -->
     <div id="manual" class="tab-content">
         <h3>Manuel Veri Ekle / Güncelle</h3>
         <div class="form-group">
@@ -107,11 +99,11 @@
         <div class="form-group">
             <label>Katsayı Türü:</label>
             <select id="manual_type">
-                <option value="gini">Gini</option>
-                <option value="automation">Otomasyon</option>
-                <option value="governance">Evcilleştirme</option>
-                <option value="consciousness">Toplumsal Bilinç</option>
-                <option value="resistance">Dış Direnç</option>
+                <option value="gini_values">Gini</option>
+                <option value="automation_values">Otomasyon</option>
+                <option value="governance_values">Evcilleştirme</option>
+                <option value="consciousness_values">Toplumsal Bilinç</option>
+                <option value="resistance_values">Dış Direnç</option>
             </select>
         </div>
         <div class="form-group">
@@ -124,10 +116,8 @@
 </div>
 
 <script>
-// Tablo isimleri (backend'den gelen)
 const tables = {{ tables|tojson }};
 
-// Sayfa yüklendiğinde ülke listesini ve kaynak seçeneklerini yükle
 window.onload = function() {
     loadCountries();
     loadSourceOptions();
@@ -143,8 +133,7 @@ function openTab(tabName) {
 async function loadCountries() {
     const res = await fetch('/get_countries');
     const countries = await res.json();
-    const selects = ['country', 'trend_country'];
-    selects.forEach(id => {
+    ['country', 'trend_country'].forEach(id => {
         const select = document.getElementById(id);
         select.innerHTML = '';
         countries.forEach(c => {
@@ -163,7 +152,7 @@ async function loadSourceOptions() {
         const res = await fetch('/get_sources', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ table: table })
+            body: JSON.stringify({ table })
         });
         const sources = await res.json();
         const div = document.createElement('div');
@@ -210,20 +199,14 @@ async function calculateKES() {
                 yearMsg += `${k}: ${v}<br>`;
             }
             yearMsg += '</p>';
-            
             let estimatedMsg = '';
-            let anyEstimated = false;
-            for (const [k, v] of Object.entries(data.estimated)) {
-                if (v === 1) anyEstimated = true;
-            }
-            if (anyEstimated) {
+            if (Object.values(data.estimated).some(v => v === 1)) {
                 estimatedMsg = '<div class="estimated"><strong>⚠️ Uyarı:</strong> Aşağıdaki katsayılar için tahmini (varsayılan 50) değer kullanılmıştır:<br>';
                 for (const [k, v] of Object.entries(data.estimated)) {
                     if (v === 1) estimatedMsg += `- ${k}<br>`;
                 }
                 estimatedMsg += '</div>';
             }
-            
             resultDiv.innerHTML = `
                 ${yearMsg}
                 ${estimatedMsg}
@@ -279,7 +262,7 @@ async function saveManual() {
     const manualResult = document.getElementById('manual_result');
     if (result.status === 'success') {
         manualResult.innerHTML = `<span style="color:green">${result.message}</span>`;
-        loadSourceOptions(); // Kaynak listesini yenile (manuel kaynak görünsün)
+        loadSourceOptions();
     } else {
         manualResult.innerHTML = `<span class="warning">${result.message}</span>`;
     }
