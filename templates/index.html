@@ -72,6 +72,10 @@
             <select id="trend_country"></select>
         </div>
         <div class="form-group">
+            <label>Dış Direnç Kaynağı:</label>
+            <select id="trend_res_source"></select>
+        </div>
+        <div class="form-group">
             <label>Başlangıç Yılı:</label>
             <input type="number" id="start_year" value="2000">
         </div>
@@ -127,8 +131,11 @@ const tables = {{ tables|tojson }};
 window.onload = function() {
     loadCountries();
     loadSourceOptions();
-    
-    async function loadMaxYear() {
+    loadResistanceSources();  // Trend için kaynakları yükle
+    loadMaxYear();
+};
+
+async function loadMaxYear() {
     const res = await fetch('/get_max_year');
     const data = await res.json();
     const yearInput = document.getElementById('year');
@@ -137,14 +144,13 @@ window.onload = function() {
         if (parseInt(yearInput.value) > data.max_year) yearInput.value = data.max_year;
     }
 }
-    loadMaxYear();
-};
 
-function openTab(tabName) {
+function openTab(tabName, evt) {
     document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
     document.querySelectorAll('.tab-button').forEach(b => b.classList.remove('active'));
     document.getElementById(tabName).classList.add('active');
-    event.currentTarget.classList.add('active');
+    if (evt) evt.currentTarget.classList.add('active');
+    else document.querySelector(`.tab-button[onclick="openTab('${tabName}')"]`).classList.add('active');
 }
 
 async function loadCountries() {
@@ -161,8 +167,25 @@ async function loadCountries() {
             select.appendChild(option);
         });
     });
-    // İlk ülke seçiliyken kaynak değerlerini yükle
     if (countries.length) updateAllSourceValues();
+}
+
+async function loadResistanceSources() {
+    // Sadece resistance_values için kaynakları al
+    const res = await fetch('/get_sources', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ table: 'resistance_values' })
+    });
+    const sources = await res.json();
+    const select = document.getElementById('trend_res_source');
+    select.innerHTML = '';
+    sources.forEach(s => {
+        const option = document.createElement('option');
+        option.value = s.source;
+        option.textContent = s.source;
+        select.appendChild(option);
+    });
 }
 
 async function loadSourceOptions() {
@@ -191,7 +214,7 @@ async function loadSourceOptions() {
     updateAllSourceValues();
 }
 
-    async function updateSourceValueAndUrl(table) {
+async function updateSourceValueAndUrl(table) {
     const select = document.getElementById(`source_${table}`);
     const source = select.value;
     const selectedOption = select.options[select.selectedIndex];
@@ -285,13 +308,14 @@ async function loadTrend() {
     const country = document.getElementById('trend_country').value;
     const start_year = parseInt(document.getElementById('start_year').value);
     const end_year = parseInt(document.getElementById('end_year').value);
+    const resistance_source = document.getElementById('trend_res_source').value;
     const graphDiv = document.getElementById('trend_graph');
     graphDiv.innerHTML = 'Yükleniyor...';
     try {
         const res = await fetch('/trend', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ country, start_year, end_year })
+            body: JSON.stringify({ country, start_year, end_year, resistance_source })
         });
         const data = await res.json();
         if (!res.ok || data.error) {
@@ -323,8 +347,8 @@ async function saveManual() {
     const manualResult = document.getElementById('manual_result');
     if (result.status === 'success') {
         manualResult.innerHTML = `<span style="color:green">${result.message}</span>`;
-        // Kaynak listesini yenile ve değerleri güncelle
         await loadSourceOptions();
+        await loadResistanceSources();  // Kaynak değiştiyse trend listesini güncelle
     } else {
         manualResult.innerHTML = `<span class="warning">${result.message}</span>`;
     }
