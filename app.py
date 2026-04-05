@@ -10,9 +10,8 @@ from data_fetcher import DataFetcher
 
 app = Flask(__name__)
 
-DATABASE_PATH = 'final_kes_data.db'  # Yeni veritabanı adı
+DATABASE_PATH = 'final_kes_data.db'
 
-# Tablo isimleri ve görünen adları
 TABLES = {
     'gini_values': 'Gini Katsayısı',
     'automation_values': 'Otomasyon',
@@ -27,7 +26,6 @@ def index():
 
 @app.route('/get_countries')
 def get_countries():
-    """Tüm ülkelerin listesini döndürür (gini_values tablosundan)"""
     fetcher = DataFetcher(DATABASE_PATH)
     countries = fetcher.get_country_list('gini_values')
     return jsonify(countries)
@@ -72,7 +70,8 @@ def calculate():
                     is_estimated = 1
             else:
                 is_estimated = fetcher.get_is_estimated(table, country, used_year, source)
-            return val, used_year, is_estimated
+            # int64'ü int'e dönüştür
+            return float(val), int(used_year), int(is_estimated)
 
         gini, gini_year, gini_est = get_val('gini_values', sources.get('gini_values', 'swiid'))
         automation, auto_year, auto_est = get_val('automation_values', sources.get('automation_values', 'owid'))
@@ -117,31 +116,33 @@ def trend():
         start_year = int(data.get('start_year', 2000))
         end_year = int(data.get('end_year', 2024))
         fetcher = DataFetcher(DATABASE_PATH)
-        sources = fetcher.get_available_sources('resistance_values')
-        default_source = sources[0] if sources else 'fsi'
-
+        
+        # Trend için varsayılan kaynakları kullan (mevcut en iyi)
         results = []
         for year in range(start_year, end_year + 1):
             gini = fetcher.get_value('gini_values', country, year, 'swiid')
             auto = fetcher.get_value('automation_values', country, year, 'owid')
             gov = fetcher.get_value('governance_values', country, year, 'wgi')
             con = fetcher.get_value('consciousness_values', country, year, 'vdem')
-            res = fetcher.get_value('resistance_values', country, year, default_source)
+            res = fetcher.get_value('resistance_values', country, year, 'fsi')
             if None in [gini, auto, gov, con, res]:
                 continue
             calc = KESCalculator()
-            v_ic = calc.calculate_v_ic(gini, auto, gov, con)
-            kes = calc.calculate_kes(v_ic, res)
-            results.append({'year': year, 'kes': kes})
+            v_ic = calc.calculate_v_ic(float(gini), float(auto), float(gov), float(con))
+            kes = calc.calculate_kes(v_ic, float(res))
+            results.append({'year': int(year), 'kes': round(float(kes), 2)})
 
-        if not results:
-            return jsonify({'error': 'Trend için yeterli veri yok'}), 404
+        if len(results) < 2:
+            return jsonify({'error': 'Trend için yeterli veri yok (en az 2 yıl gerekli)'}), 404
 
         df = pd.DataFrame(results)
+        # year sütununu int yap
+        df['year'] = df['year'].astype(int)
         fig = px.line(df, x='year', y='kes', title=f'{country} - KES Trendi',
                       markers=True, labels={'kes': 'KES', 'year': 'Yıl'})
         fig.add_hline(y=50, line_dash="dash", line_color="red")
         fig.update_layout(yaxis_range=[0,100])
+        # Plotly figürünü JSON'a dönüştür
         graph_json = json.dumps(fig, cls=plotly.utils.PlotlyJSONEncoder)
         return jsonify({'graph': graph_json})
     except Exception as e:
