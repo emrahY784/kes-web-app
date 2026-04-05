@@ -137,6 +137,7 @@ window.onload = function() {
         if (parseInt(yearInput.value) > data.max_year) yearInput.value = data.max_year;
     }
 }
+    loadMaxYear();
 };
 
 function openTab(tabName) {
@@ -258,13 +259,13 @@ async function calculateKES() {
             }
             
             resultDiv.innerHTML = `
-                ${yearMsg}
-                ${estimatedMsg}
-                <p><strong>KES:</strong> ${data.kes} (${data.interpretation})</p>
-                <p><strong>V_iç Skoru:</strong> ${data.v_ic}</p>
-                <p><strong>V_dış Skoru (Dış Direnç):</strong> ${data.v_dis}</p>
-                <p><em>Yorum: 0-33 Sermayeci, 34-66 Karma, 67-100 Kamucu</em></p>
-            `;
+    ${yearMsg}
+    ${estimatedMsg}
+    <p><strong>KES:</strong> ${data.kes.toFixed(2)} (${data.interpretation})</p>
+    <p><strong>V_iç Skoru:</strong> ${data.v_ic.toFixed(2)}</p>
+    <p><strong>V_dış Skoru (Dış Direnç):</strong> ${data.v_dis.toFixed(2)}</p>
+    <p><em>Yorum: 0-33 Sermayeci, 34-66 Karma, 67-100 Kamucu</em></p>
+`;
         }
     } catch (err) {
         resultDiv.innerHTML = `<span class="warning">Ağ hatası: ${err.message}</span>`;
