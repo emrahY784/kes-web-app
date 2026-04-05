@@ -56,17 +56,18 @@ class DataFetcher:
 
     def save_manual_record(self, country, year, katsayi_turu, value, source='manual'):
         table_map = {
-            'gini_values': 'gini_values',
-            'automation_values': 'automation_values',
-            'governance_values': 'governance_values',
-            'consciousness_values': 'consciousness_values',
-            'resistance_values': 'resistance_values'
+            'gini': 'gini_values',
+            'automation': 'automation_values',
+            'governance': 'governance_values',
+            'consciousness': 'consciousness_values',
+            'resistance': 'resistance_values'
         }
         table = table_map.get(katsayi_turu)
         if not table:
             return False
         conn = sqlite3.connect(self.db_path)
         cursor = conn.cursor()
+        # Önce aynı kayıt var mı kontrol et (source manual)
         cursor.execute(f"""
             SELECT 1 FROM {table}
             WHERE country = ? AND year = ? AND source = ?
