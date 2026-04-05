@@ -10,16 +10,15 @@ from data_fetcher import DataFetcher
 
 app = Flask(__name__)
 
-# Varsayılan veritabanı dosyası (repo kökünde olmalı)
-DATABASE_PATH = 'kes_data_unified.db'
+DATABASE_PATH = 'final_kes_data.db'  # Yeni veritabanı adı
 
-# Tablo isimleri ve görünen adları (frontend'e gönderilecek)
+# Tablo isimleri ve görünen adları
 TABLES = {
-    'gini': 'Gini Katsayısı',
-    'automation': 'Otomasyon',
-    'governance': 'Evcilleştirme Kapasitesi',
-    'consciousness': 'Toplumsal Bilinç',
-    'resistance': 'Dış Direnç'
+    'gini_values': 'Gini Katsayısı',
+    'automation_values': 'Otomasyon',
+    'governance_values': 'Evcilleştirme Kapasitesi',
+    'consciousness_values': 'Toplumsal Bilinç',
+    'resistance_values': 'Dış Direnç'
 }
 
 @app.route('/')
@@ -28,19 +27,17 @@ def index():
 
 @app.route('/get_countries')
 def get_countries():
-    """Tüm ülkelerin listesini döndürür (gini tablosundan)"""
+    """Tüm ülkelerin listesini döndürür (gini_values tablosundan)"""
     fetcher = DataFetcher(DATABASE_PATH)
-    countries = fetcher.get_country_list('gini')
+    countries = fetcher.get_country_list('gini_values')
     return jsonify(countries)
 
 @app.route('/get_sources', methods=['POST'])
 def get_sources():
-    """Bir tablo için mevcut kaynakları döndürür"""
     data = request.json
     table = data.get('table')
     fetcher = DataFetcher(DATABASE_PATH)
     sources = fetcher.get_available_sources(table)
-    # Manuel kaynağı da ekle (kullanıcı manuel giriş yapabilir)
     if 'manual' not in sources:
         sources.append('manual')
     return jsonify(sources)
@@ -66,7 +63,6 @@ def calculate():
             used_year = year
             is_estimated = 0
             if val is None:
-                # En yakın yılı bul
                 years = fetcher.get_all_years(country, table, source)
                 if years:
                     used_year = min(years, key=lambda y: abs(y - year))
@@ -75,15 +71,14 @@ def calculate():
                     val = 50.0
                     is_estimated = 1
             else:
-                # Değer var ama is_estimated kontrolü
                 is_estimated = fetcher.get_is_estimated(table, country, used_year, source)
             return val, used_year, is_estimated
 
-        gini, gini_year, gini_est = get_val('gini', sources.get('gini', 'worldbank'))
-        automation, auto_year, auto_est = get_val('automation', sources.get('automation', 'owid'))
-        governance, gov_year, gov_est = get_val('governance', sources.get('governance', 'wgi'))
-        consciousness, con_year, con_est = get_val('consciousness', sources.get('consciousness', 'worldbank_union'))
-        resistance, res_year, res_est = get_val('resistance', sources.get('resistance', 'wb_political_stability'))
+        gini, gini_year, gini_est = get_val('gini_values', sources.get('gini_values', 'swiid'))
+        automation, auto_year, auto_est = get_val('automation_values', sources.get('automation_values', 'owid'))
+        governance, gov_year, gov_est = get_val('governance_values', sources.get('governance_values', 'wgi'))
+        consciousness, con_year, con_est = get_val('consciousness_values', sources.get('consciousness_values', 'vdem'))
+        resistance, res_year, res_est = get_val('resistance_values', sources.get('resistance_values', 'fsi'))
 
         estimated = {
             'gini': gini_est,
@@ -122,17 +117,16 @@ def trend():
         start_year = int(data.get('start_year', 2000))
         end_year = int(data.get('end_year', 2024))
         fetcher = DataFetcher(DATABASE_PATH)
-        # Trend için varsayılan kaynakları kullan
-        sources = fetcher.get_available_sources('resistance')
-        default_source = sources[0] if sources else 'wb_political_stability'
+        sources = fetcher.get_available_sources('resistance_values')
+        default_source = sources[0] if sources else 'fsi'
 
         results = []
         for year in range(start_year, end_year + 1):
-            gini = fetcher.get_value('gini', country, year, 'worldbank')
-            auto = fetcher.get_value('automation', country, year, 'owid')
-            gov = fetcher.get_value('governance', country, year, 'wgi')
-            con = fetcher.get_value('consciousness', country, year, 'worldbank_union')
-            res = fetcher.get_value('resistance', country, year, default_source)
+            gini = fetcher.get_value('gini_values', country, year, 'swiid')
+            auto = fetcher.get_value('automation_values', country, year, 'owid')
+            gov = fetcher.get_value('governance_values', country, year, 'wgi')
+            con = fetcher.get_value('consciousness_values', country, year, 'vdem')
+            res = fetcher.get_value('resistance_values', country, year, default_source)
             if None in [gini, auto, gov, con, res]:
                 continue
             calc = KESCalculator()
