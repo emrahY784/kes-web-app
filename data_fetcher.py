@@ -12,6 +12,32 @@ class DataFetcher:
         conn.close()
         return df['source'].tolist() if not df.empty else []
 
+    def get_sources_with_urls(self, table_name):
+        """Kaynak adı ve URL bilgisini birlikte döndürür"""
+        source_urls = {
+            'original_unified': 'Kendi oluşturduğumuz unified veritabanı (Dünya Bankası + OWID + WGI + ILO)',
+            'full_db_legacy': 'Eski full.db dosyası (Dünya Bankası + OWID + WGI + ILO)',
+            'worldbank': 'https://api.worldbank.org/v2/country/all/indicator/SI.POV.GINI',
+            'owid': 'https://ourworldindata.org/grapher/robot-density-in-manufacturing',
+            'wgi': 'https://info.worldbank.org/governance/wgi/',
+            'wgi_fixed': 'WGI verilerinin normalize edilmiş hali (0-100)',
+            'worldbank_union': 'https://api.worldbank.org/v2/country/all/indicator/SL.UEM.TRDN.ZS',
+            'wb_political_stability': 'https://api.worldbank.org/v2/country/all/indicator/PV.EST',
+            'fsi': 'https://fragilestatesindex.org/',
+            'gpr': 'https://www.matteoiacoviello.com/gpr.htm',
+            'evi': 'https://www.un.org/development/desa/dpad/least-developed-country-category/evi.html',
+            'vdem': 'https://www.v-dem.net/',
+            'swiid': 'https://fsolt.org/swiid/',
+            'ifr': 'https://ifr.org/',
+            'manual': 'Kullanıcı tarafından manuel girilen veri'
+        }
+        sources = self.get_available_sources(table_name)
+        result = []
+        for src in sources:
+            url = source_urls.get(src, 'Kaynak bilgisi mevcut değil')
+            result.append({'source': src, 'url': url})
+        return result
+
     def get_value(self, table_name, country, year, source):
         conn = sqlite3.connect(self.db_path)
         query = f"""
