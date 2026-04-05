@@ -111,6 +111,15 @@
         <div id="manual_result" class="result"></div>
     </div>
 </div>
+    <div class="result" style="background:#e8f4f8; margin-top:20px;">
+    <h4>📐 Hesaplama Formülü</h4>
+    <p><strong>V_iç = α·Gini + β·Otomasyon − (γ·Evcilleştirme + λ·Bilinç)</strong><br>
+    <strong>V_iç_score = (V_iç + 100) / 2</strong> (0-100 arası)<br>
+    <strong>KES = (V_iç_score × Dış Direnç) / 100</strong> (varsayılan)<br>
+    Geometrik formül: <strong>KES = V_iç_score × √(Dış Direnç) / 10</strong><br>
+    Min formülü: <strong>KES = min(V_iç_score, Dış Direnç)</strong><br>
+    <em>Yorum: 0-33 Sermayeci, 34-66 Karma, 67-100 Kamucu Kutup</em></p>
+</div>
 
 <script>
 const tables = {{ tables|tojson }};
@@ -118,6 +127,16 @@ const tables = {{ tables|tojson }};
 window.onload = function() {
     loadCountries();
     loadSourceOptions();
+    
+    async function loadMaxYear() {
+    const res = await fetch('/get_max_year');
+    const data = await res.json();
+    const yearInput = document.getElementById('year');
+    if (data.max_year) {
+        yearInput.max = data.max_year;
+        if (parseInt(yearInput.value) > data.max_year) yearInput.value = data.max_year;
+    }
+}
 };
 
 function openTab(tabName) {
