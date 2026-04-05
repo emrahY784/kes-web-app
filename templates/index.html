@@ -180,15 +180,24 @@ async function loadSourceOptions() {
         div.id = `source-group-${table}`;
         div.innerHTML = `
             <label>${label} Kaynağı:</label>
-            <select id="source_${table}" onchange="updateSourceValue('${table}')">
-                ${sources.map(s => `<option value="${s}">${s}</option>`).join('')}
+            <select id="source_${table}" onchange="updateSourceValueAndUrl('${table}')">
+                ${sources.map(s => `<option value="${s.source}" data-url="${s.url}">${s.source}</option>`).join('')}
             </select>
             <span id="value_${table}" class="source-value">Değer: --</span>
+            <span id="url_${table}" style="font-size:0.7em; color:#666; margin-left:10px;">${sources[0]?.url || ''}</span>
         `;
         container.appendChild(div);
     }
-    // Kaynak seçimleri yüklendikten sonra değerleri getir
     updateAllSourceValues();
+}
+
+    async function updateSourceValueAndUrl(table) {
+    const select = document.getElementById(`source_${table}`);
+    const source = select.value;
+    const selectedOption = select.options[select.selectedIndex];
+    const url = selectedOption.getAttribute('data-url') || '';
+    document.getElementById(`url_${table}`).innerText = url;
+    await updateSourceValue(table);
 }
 
 async function updateSourceValue(table) {
@@ -285,17 +294,17 @@ async function loadTrend() {
             body: JSON.stringify({ country, start_year, end_year })
         });
         const data = await res.json();
-        if (data.error) {
-            graphDiv.innerHTML = `<span class="warning">${data.error}</span>`;
+        if (!res.ok || data.error) {
+            graphDiv.innerHTML = `<span class="warning">Hata: ${data.error || 'Sunucu hatası'}</span>`;
         } else {
             const graph = JSON.parse(data.graph);
             Plotly.newPlot('trend_graph', graph.data, graph.layout);
         }
     } catch (err) {
-        graphDiv.innerHTML = `<span class="warning">Hata: ${err.message}</span>`;
+        graphDiv.innerHTML = `<span class="warning">Ağ hatası: ${err.message}</span>`;
     }
 }
-
+    
 async function saveManual() {
     const country = document.getElementById('manual_country').value;
     const year = parseInt(document.getElementById('manual_year').value);
