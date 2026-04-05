@@ -12,7 +12,7 @@ from data_fetcher import DataFetcher
 app = Flask(__name__)
 
 # Veritabanı dosyanızın adını buraya yazın
-DATABASE_PATH = 'new_kes_data.db'
+DATABASE_PATH = 'final_kes_data.db'
 
 # Tablo isimleri ve görünen adları
 TABLES = {
