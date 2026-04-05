@@ -40,9 +40,7 @@ def get_sources():
     data = request.json
     table = data.get('table')
     fetcher = DataFetcher(DATABASE_PATH)
-    sources = fetcher.get_available_sources(table)
-    if 'manual' not in sources:
-        sources.append('manual')
+    sources = fetcher.get_sources_with_urls(table)
     return jsonify(sources)
 
 @app.route('/get_value', methods=['POST'])
@@ -54,7 +52,7 @@ def get_value():
     source = data['source']
     fetcher = DataFetcher(DATABASE_PATH)
     val, used_year, is_est = fetcher.get_value_with_info(table, country, year, source)
-    return jsonify({'value': round(val, 2) if val else 50, 'used_year': used_year, 'estimated': is_est})
+    return jsonify({'value': round(val, 2), 'used_year': used_year, 'estimated': is_est})
 
 @app.route('/calculate', methods=['POST'])
 def calculate():
@@ -122,19 +120,29 @@ def trend():
         end_year = int(data.get('end_year', 2024))
         fetcher = DataFetcher(DATABASE_PATH)
 
-        # Trend için resistance tablosundaki ilk kaynağı bul (original_unified yoksa)
-        sources = fetcher.get_available_sources('resistance_values')
-        if not sources:
-            return jsonify({'error': 'Dış direnç için kaynak bulunamadı'}), 404
-        default_source = sources[0]
+        # Her tablo için mevcut ilk kaynağı bul
+        sources_gini = fetcher.get_available_sources('gini_values')
+        sources_auto = fetcher.get_available_sources('automation_values')
+        sources_gov = fetcher.get_available_sources('governance_values')
+        sources_con = fetcher.get_available_sources('consciousness_values')
+        sources_res = fetcher.get_available_sources('resistance_values')
+
+        if not sources_gini or not sources_auto or not sources_gov or not sources_con or not sources_res:
+            return jsonify({'error': 'Bir veya daha fazla katsayı için kaynak bulunamadı'}), 404
+
+        source_gini = sources_gini[0]
+        source_auto = sources_auto[0]
+        source_gov = sources_gov[0]
+        source_con = sources_con[0]
+        source_res = sources_res[0]
 
         results = []
         for year in range(start_year, end_year + 1):
-            gini = fetcher.get_value('gini_values', country, year, 'original_unified')
-            auto = fetcher.get_value('automation_values', country, year, 'original_unified')
-            gov = fetcher.get_value('governance_values', country, year, 'original_unified')
-            con = fetcher.get_value('consciousness_values', country, year, 'original_unified')
-            res = fetcher.get_value('resistance_values', country, year, default_source)
+            gini = fetcher.get_value('gini_values', country, year, source_gini)
+            auto = fetcher.get_value('automation_values', country, year, source_auto)
+            gov = fetcher.get_value('governance_values', country, year, source_gov)
+            con = fetcher.get_value('consciousness_values', country, year, source_con)
+            res = fetcher.get_value('resistance_values', country, year, source_res)
             if None in [gini, auto, gov, con, res]:
                 continue
             calc = KESCalculator()
