@@ -9,7 +9,7 @@ from data_fetcher import DataFetcher
 
 app = Flask(__name__)
 
-DATABASE_PATH = 'new_kes_data.db'  # Kendi veritabanı adınız
+DATABASE_PATH = 'final_kes_data.db'  # Kendi veritabanı adınız
 
 TABLES = {
     'gini_values': 'Gini Katsayısı',
