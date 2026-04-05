@@ -4,13 +4,12 @@ import plotly.express as px
 import plotly.utils
 import json
 import traceback
-import os
 from kes_calculator import KESCalculator
 from data_fetcher import DataFetcher
 
 app = Flask(__name__)
 
-DATABASE_PATH = 'final_kes_data.db'  # Kendi veritabanı adınızla değiştirin
+DATABASE_PATH = 'new_kes_data.db'  # Kendi veritabanı adınız
 
 TABLES = {
     'gini_values': 'Gini Katsayısı',
@@ -30,6 +29,12 @@ def get_countries():
     countries = fetcher.get_country_list('gini_values')
     return jsonify(countries)
 
+@app.route('/get_max_year')
+def get_max_year():
+    fetcher = DataFetcher(DATABASE_PATH)
+    max_year = fetcher.get_max_year()
+    return jsonify({'max_year': max_year})
+
 @app.route('/get_sources', methods=['POST'])
 def get_sources():
     data = request.json
@@ -42,21 +47,14 @@ def get_sources():
 
 @app.route('/get_value', methods=['POST'])
 def get_value():
-    """Bir ülke, yıl, tablo ve kaynak için değeri döndürür"""
     data = request.json
     table = data['table']
     country = data['country']
     year = int(data['year'])
     source = data['source']
     fetcher = DataFetcher(DATABASE_PATH)
-    val = fetcher.get_value(table, country, year, source)
-    if val is None:
-        # En yakın yılı bul
-        years = fetcher.get_all_years(country, table, source)
-        if years:
-            nearest = min(years, key=lambda y: abs(y - year))
-            val = fetcher.get_value(table, country, nearest, source)
-    return jsonify({'value': val if val is not None else 50})
+    val, used_year, is_est = fetcher.get_value_with_info(table, country, year, source)
+    return jsonify({'value': round(val, 2) if val else 50, 'used_year': used_year, 'estimated': is_est})
 
 @app.route('/calculate', methods=['POST'])
 def calculate():
@@ -75,20 +73,8 @@ def calculate():
         fetcher = DataFetcher(DATABASE_PATH)
 
         def get_val(table, source):
-            val = fetcher.get_value(table, country, year, source)
-            used_year = year
-            is_estimated = 0
-            if val is None:
-                years = fetcher.get_all_years(country, table, source)
-                if years:
-                    used_year = min(years, key=lambda y: abs(y - year))
-                    val = fetcher.get_value(table, country, used_year, source)
-                if val is None:
-                    val = 50.0
-                    is_estimated = 1
-            else:
-                is_estimated = fetcher.get_is_estimated(table, country, used_year, source)
-            return float(val), int(used_year), int(is_estimated)
+            val, used_year, is_est = fetcher.get_value_with_info(table, country, year, source)
+            return val, used_year, is_est
 
         gini, gini_year, gini_est = get_val('gini_values', sources.get('gini_values', 'original_unified'))
         automation, auto_year, auto_est = get_val('automation_values', sources.get('automation_values', 'original_unified'))
@@ -110,9 +96,9 @@ def calculate():
 
         response = {
             'status': 'success',
-            'kes': round(float(kes), 2),
-            'v_ic': round(float(v_ic), 2),
-            'v_dis': round(float(resistance), 2),
+            'kes': round(kes, 2),
+            'v_ic': round(v_ic, 2),
+            'v_dis': round(resistance, 2),
             'interpretation': 'Sermayeci Kutup' if kes < 33 else ('Kamucu Kutup' if kes > 66 else 'Karma / Geçiş'),
             'used_years': {
                 'gini_values': gini_year,
@@ -135,8 +121,8 @@ def trend():
         start_year = int(data.get('start_year', 2000))
         end_year = int(data.get('end_year', 2024))
         fetcher = DataFetcher(DATABASE_PATH)
-        
-        # Trend için resistance tablosundaki ilk kaynağı al
+
+        # Trend için resistance tablosundaki ilk kaynağı bul (original_unified yoksa)
         sources = fetcher.get_available_sources('resistance_values')
         if not sources:
             return jsonify({'error': 'Dış direnç için kaynak bulunamadı'}), 404
@@ -154,10 +140,10 @@ def trend():
             calc = KESCalculator()
             v_ic = calc.calculate_v_ic(gini, auto, gov, con)
             kes = calc.calculate_kes(v_ic, res)
-            results.append({'year': int(year), 'kes': float(kes)})
+            results.append({'year': year, 'kes': round(kes, 2)})
 
         if not results:
-            return jsonify({'error': f'{country} için {start_year}-{end_year} aralığında trend verisi yok. Lütfen farklı yıl aralığı veya ülke seçin.'}), 404
+            return jsonify({'error': f'{country} için {start_year}-{end_year} aralığında trend verisi yok.'}), 404
 
         df = pd.DataFrame(results)
         fig = px.line(df, x='year', y='kes', title=f'{country} - KES Trendi',
