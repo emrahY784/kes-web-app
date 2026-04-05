@@ -2,7 +2,7 @@ import sqlite3
 import pandas as pd
 
 class DataFetcher:
-    def __init__(self, db_path='final_kes_data.db'):
+    def __init__(self, db_path='new_kes_data.db'):
         self.db_path = db_path
 
     def get_available_sources(self, table_name):
@@ -21,7 +21,8 @@ class DataFetcher:
         df = pd.read_sql_query(query, conn, params=(country, year, source))
         conn.close()
         if not df.empty:
-            return df.iloc[0]['value']
+            val = df.iloc[0]['value']
+            return float(val) if val is not None else None
         return None
 
     def get_is_estimated(self, table_name, country, year, source):
@@ -33,7 +34,7 @@ class DataFetcher:
         df = pd.read_sql_query(query, conn, params=(country, year, source))
         conn.close()
         if not df.empty:
-            return df.iloc[0]['is_estimated']
+            return int(df.iloc[0]['is_estimated'])
         return 1
 
     def get_all_years(self, country, table_name, source):
@@ -45,7 +46,7 @@ class DataFetcher:
         """
         df = pd.read_sql_query(query, conn, params=(country, source))
         conn.close()
-        return df['year'].tolist()
+        return [int(y) for y in df['year'].tolist()]
 
     def get_country_list(self, table_name):
         conn = sqlite3.connect(self.db_path)
@@ -67,7 +68,6 @@ class DataFetcher:
             return False
         conn = sqlite3.connect(self.db_path)
         cursor = conn.cursor()
-        # Önce aynı kayıt var mı kontrol et (source manual)
         cursor.execute(f"""
             SELECT 1 FROM {table}
             WHERE country = ? AND year = ? AND source = ?
