@@ -23,7 +23,7 @@
 <body>
 <div class="container">
     <h1>📊 Kutup Eğilim Skoru (KES)</h1>
-    <p>Her katsayı için farklı veri kaynağı seçebilirsiniz. <span class="warning">Turuncu arka planlı uyarılar</span> tahmini (varsayılan 50) değer kullanıldığını belirtir.</p>
+    <p>Her katsayı için farklı veri kaynağı seçebilirsiniz.</p>
 
     <div>
         <button class="tab-button active" onclick="openTab('calculate')">Hesapla</button>
@@ -59,10 +59,10 @@
             <input type="number" id="lambd" step="0.05" value="0.5">
         </div>
         <div class="form-group">
-            <label><input type="checkbox" id="geometric"> Geometrik formül (K = V_iç * √(V_dış)/10)</label>
+            <label><input type="checkbox" id="geometric"> Geometrik formül</label>
         </div>
         <div class="form-group">
-            <label><input type="checkbox" id="use_min"> Min formülü (K = min(V_iç, V_dış))</label>
+            <label><input type="checkbox" id="use_min"> Min formülü</label>
         </div>
         <button onclick="calculateKES()">Hesapla</button>
         <div id="result" class="result"></div>
@@ -99,11 +99,11 @@
         <div class="form-group">
             <label>Katsayı Türü:</label>
             <select id="manual_type">
-                <option value="gini_values">Gini</option>
-                <option value="automation_values">Otomasyon</option>
-                <option value="governance_values">Evcilleştirme</option>
-                <option value="consciousness_values">Toplumsal Bilinç</option>
-                <option value="resistance_values">Dış Direnç</option>
+                <option value="gini">Gini</option>
+                <option value="automation">Otomasyon</option>
+                <option value="governance">Evcilleştirme</option>
+                <option value="consciousness">Toplumsal Bilinç</option>
+                <option value="resistance">Dış Direnç</option>
             </select>
         </div>
         <div class="form-group">
@@ -133,7 +133,8 @@ function openTab(tabName) {
 async function loadCountries() {
     const res = await fetch('/get_countries');
     const countries = await res.json();
-    ['country', 'trend_country'].forEach(id => {
+    const selects = ['country', 'trend_country'];
+    selects.forEach(id => {
         const select = document.getElementById(id);
         select.innerHTML = '';
         countries.forEach(c => {
@@ -152,7 +153,7 @@ async function loadSourceOptions() {
         const res = await fetch('/get_sources', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ table })
+            body: JSON.stringify({ table: table })
         });
         const sources = await res.json();
         const div = document.createElement('div');
@@ -199,14 +200,20 @@ async function calculateKES() {
                 yearMsg += `${k}: ${v}<br>`;
             }
             yearMsg += '</p>';
+            
             let estimatedMsg = '';
-            if (Object.values(data.estimated).some(v => v === 1)) {
+            let anyEstimated = false;
+            for (const [k, v] of Object.entries(data.estimated)) {
+                if (v === 1) anyEstimated = true;
+            }
+            if (anyEstimated) {
                 estimatedMsg = '<div class="estimated"><strong>⚠️ Uyarı:</strong> Aşağıdaki katsayılar için tahmini (varsayılan 50) değer kullanılmıştır:<br>';
                 for (const [k, v] of Object.entries(data.estimated)) {
                     if (v === 1) estimatedMsg += `- ${k}<br>`;
                 }
                 estimatedMsg += '</div>';
             }
+            
             resultDiv.innerHTML = `
                 ${yearMsg}
                 ${estimatedMsg}
