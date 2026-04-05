@@ -21,21 +21,25 @@ class DataFetcher:
         df = pd.read_sql_query(query, conn, params=(country, year, source))
         conn.close()
         if not df.empty:
-            val = df.iloc[0]['value']
-            return float(val) if val is not None else None
+            return float(df.iloc[0]['value'])
         return None
 
-    def get_is_estimated(self, table_name, country, year, source):
+    def get_value_with_info(self, table_name, country, year, source):
+        """Değer, kullanılan yıl ve tahmini olup olmadığını döndürür"""
         conn = sqlite3.connect(self.db_path)
         query = f"""
-            SELECT is_estimated FROM {table_name}
-            WHERE country = ? AND year = ? AND source = ?
+            SELECT value, year, is_estimated FROM {table_name}
+            WHERE country = ? AND source = ?
+            ORDER BY ABS(year - ?) LIMIT 1
         """
-        df = pd.read_sql_query(query, conn, params=(country, year, source))
+        df = pd.read_sql_query(query, conn, params=(country, source, year))
         conn.close()
         if not df.empty:
-            return int(df.iloc[0]['is_estimated'])
-        return 1
+            val = float(df.iloc[0]['value'])
+            used_year = int(df.iloc[0]['year'])
+            is_est = int(df.iloc[0]['is_estimated'])
+            return val, used_year, is_est
+        return 50.0, year, 1
 
     def get_all_years(self, country, table_name, source):
         conn = sqlite3.connect(self.db_path)
@@ -54,6 +58,15 @@ class DataFetcher:
         df = pd.read_sql_query(query, conn)
         conn.close()
         return df['country'].tolist()
+
+    def get_max_year(self):
+        """Tüm tablolardaki en büyük yılı bul"""
+        conn = sqlite3.connect(self.db_path)
+        cursor = conn.cursor()
+        cursor.execute("SELECT MAX(year) FROM gini_values")
+        max_year = cursor.fetchone()[0]
+        conn.close()
+        return max_year if max_year else 2024
 
     def save_manual_record(self, country, year, katsayi_turu, value, source='manual'):
         table_map = {
