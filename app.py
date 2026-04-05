@@ -5,16 +5,13 @@ import plotly.utils
 import json
 import traceback
 import os
-import numpy as np
 from kes_calculator import KESCalculator
 from data_fetcher import DataFetcher
 
 app = Flask(__name__)
 
-# Veritabanı dosyanızın adını buraya yazın
-DATABASE_PATH = 'final_kes_data.db'
+DATABASE_PATH = 'new_kes_data.db'  # Kendi veritabanı adınızla değiştirin
 
-# Tablo isimleri ve görünen adları
 TABLES = {
     'gini_values': 'Gini Katsayısı',
     'automation_values': 'Otomasyon',
@@ -42,6 +39,24 @@ def get_sources():
     if 'manual' not in sources:
         sources.append('manual')
     return jsonify(sources)
+
+@app.route('/get_value', methods=['POST'])
+def get_value():
+    """Bir ülke, yıl, tablo ve kaynak için değeri döndürür"""
+    data = request.json
+    table = data['table']
+    country = data['country']
+    year = int(data['year'])
+    source = data['source']
+    fetcher = DataFetcher(DATABASE_PATH)
+    val = fetcher.get_value(table, country, year, source)
+    if val is None:
+        # En yakın yılı bul
+        years = fetcher.get_all_years(country, table, source)
+        if years:
+            nearest = min(years, key=lambda y: abs(y - year))
+            val = fetcher.get_value(table, country, nearest, source)
+    return jsonify({'value': val if val is not None else 50})
 
 @app.route('/calculate', methods=['POST'])
 def calculate():
@@ -73,7 +88,6 @@ def calculate():
                     is_estimated = 1
             else:
                 is_estimated = fetcher.get_is_estimated(table, country, used_year, source)
-            # Python int/float'a dönüştür (numpy tiplerinden kurtul)
             return float(val), int(used_year), int(is_estimated)
 
         gini, gini_year, gini_est = get_val('gini_values', sources.get('gini_values', 'original_unified'))
@@ -98,6 +112,7 @@ def calculate():
             'status': 'success',
             'kes': round(float(kes), 2),
             'v_ic': round(float(v_ic), 2),
+            'v_dis': round(float(resistance), 2),
             'interpretation': 'Sermayeci Kutup' if kes < 33 else ('Kamucu Kutup' if kes > 66 else 'Karma / Geçiş'),
             'used_years': {
                 'gini_values': gini_year,
@@ -142,7 +157,7 @@ def trend():
             results.append({'year': int(year), 'kes': float(kes)})
 
         if not results:
-            return jsonify({'error': f'{country} için {start_year}-{end_year} aralığında trend verisi yok'}), 404
+            return jsonify({'error': f'{country} için {start_year}-{end_year} aralığında trend verisi yok. Lütfen farklı yıl aralığı veya ülke seçin.'}), 404
 
         df = pd.DataFrame(results)
         fig = px.line(df, x='year', y='kes', title=f'{country} - KES Trendi',
